@@ -142,6 +142,6 @@ npm run build
 
 ## 项目状态
 
-包含 Supabase 上传和管理员仪表板的新版已经完成本地生产构建与 7 项自动测试，但尚未发布。请先按照 [`SUPABASE_SETUP.md`](./SUPABASE_SETUP.md) 创建管理员并运行数据库脚本；完成后再发布，以免参与者完成实验后遇到上传失败。
+包含 Supabase 上传和管理员仪表板的新版已于 2026-07-11 发布到 GitHub Pages，并通过本地生产构建、代码检查与 7 项自动测试。数据库脚本已经执行；参与者最终记录会远程保存，输入保留值 `admin` 后可使用管理员邮箱密码查看数据。
 
-当前 GitHub Pages 在线站点仍是上一版参与者实验页面，不应视为远程数据功能已经启用。
+Supabase 的 Email provider 必须保持开启；为了阻止其他人创建管理员账号，只关闭独立的 **Allow new users to sign up / Enable sign ups** 选项。
