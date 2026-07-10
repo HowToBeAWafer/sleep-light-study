@@ -152,6 +152,17 @@
 - `localStorage` 可能被用户清理或在隐私模式下受限，完成后必须及时下载。
 - 本任务只记录短时视觉注意反应，不记录入睡时间、睡眠质量或其他睡眠结局。
 
+## 13. 内置 Test mode
+
+根据试用需求，加入保留 Participant ID `test`（不区分大小写）：
+
+- 可反复运行完整五分钟实验
+- 所有计时、十字和结果统计仍正常工作
+- `persist()` 在检测到 test participant 后直接返回内存记录，不写入 `localStorage`
+- 历史会话导出会过滤 test participant
+- 结果页隐藏 CSV/JSON 下载，并明确说明记录未保存
+- 进入页面时会清理旧版本可能留下的 test participant 本地记录
+
 ## 变更摘要
 
 | 日期 | 变更 |
@@ -162,3 +173,4 @@
 | 2026-07-10 | 增加环境事件、误点、漏答和 omitted 记录 |
 | 2026-07-10 | 完成 OpenAI Sites 部署并确认 Cloudflare 网络拦截 |
 | 2026-07-10 | 迁移 GitHub Pages，发布并验证公开备用站点 |
+| 2026-07-10 | 加入可重复使用且不保存记录的内置 test participant |
