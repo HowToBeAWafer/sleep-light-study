@@ -77,7 +77,7 @@ Participant ID 输入 `test`（不区分大小写）会进入可重复使用的 
 - 会话是正常完成（`completed`）还是由 `END` 提前终止（`terminated`）
 - 页面隐藏/恢复、进入/退出全屏等环境事件
 
-CSV 中的事件按照实验经过时间排序，并包含足以重建会话的实验参数。暂停会以独立事件行导出，包含暂停开始、结束和持续时间；误点会以 `false_click` 事件导出。参与者编号会进行电子表格公式注入防护。
+CSV 始终包含一行 `session_summary`，因此即使参与者在第一个十字出现前就使用 `END`，参与者编号、条件、时间和终止状态也不会丢失。其余事件按照实验经过时间排序；暂停会以独立事件行导出，包含暂停开始、结束和持续时间，误点会以 `false_click` 事件导出。参与者编号会进行电子表格公式注入防护。
 
 使用 `END` 提前终止时，尚未开始的计划仍保留在 JSON 的 `trialPlan` 中，但不会被误记为漏答或 `omitted`；当时正在显示的十字会标记为 `cancelled`。
 
@@ -111,6 +111,7 @@ npm run build
 ## 主要文件
 
 - `app/page.tsx`：实验状态、计时、十字计划、响应记录和数据导出
+- `app/study-data.ts`：CSV 会话摘要与事件行序列化
 - `app/globals.css`：开始页、刺激页和结果页样式
 - `app/layout.tsx`：网站标题、描述和社交分享信息
 - `.github/workflows/pages.yml`：GitHub Pages 发布流程（位于公开部署仓库）
