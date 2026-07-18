@@ -23,6 +23,17 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Build application
+        run: npm run build
+      - name: Export static GitHub Pages bundle
+        run: npm run export:github-pages
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
@@ -30,7 +41,7 @@ jobs:
       - name: Upload static site
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: work/github-pages-release
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
