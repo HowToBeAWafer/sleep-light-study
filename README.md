@@ -5,11 +5,11 @@
 ## 在线版本
 
 - 推荐入口：[GitHub Pages](https://howtobeawafer.github.io/sleep-light-study/)
-- 备用入口：[OpenAI Sites](https://sleep-light-study.dkm26355.chatgpt.site/)
+- 旧版备用地址：[OpenAI Sites](https://sleep-light-study.dkm26355.chatgpt.site/)（部分网络会被 Cloudflare 拦截，不作为本版本参与者入口）
 
 部分网络可能会被 `chatgpt.site` 前方的 Cloudflare 安全规则拦截，因此参与者应优先使用 GitHub Pages。
 
-2026-07-18 双语姓名档案版本已完成生产数据库迁移，并通过 GitHub Pages 与 OpenAI Sites 发布。GitHub Pages 是参与者的推荐入口；OpenAI Sites 保留为备用入口。
+2026-07-18 双语姓名档案版本已完成生产数据库迁移，并发布到 GitHub Pages。OpenAI Sites 的源码仓库在当前受限网络中无法连接，而且该域名仍会向部分访问者显示 Cloudflare 拦截页，因此本次没有把它记录为新版发布成功；参与者只应使用 GitHub Pages。
 
 ## Protocol v3 实验流程
 
@@ -263,6 +263,6 @@ npm test
 
 - 2026-07-11：发布 schema v2，包括 Supabase 最终上传、管理员仪表板和触摸设备控制。
 - 2026-07-18：加入 Protocol v3 源码与数据库迁移，包括四次稀疏十字、正常睡眠 Control、前后 KSS、睡眠/环境问卷、前后设备记录、三次反应检查和 48 小时草稿恢复。
-- 2026-07-18：完成中英双语、唯一姓名档案与恢复码、五条件进度、只追加反馈、构建版本追踪和管理员黄色一致性提醒；生产数据库两份增量迁移和结构核对通过，并发布 GitHub Pages 与 OpenAI Sites。
+- 2026-07-18：完成中英双语、唯一姓名档案与恢复码、五条件进度、只追加反馈、构建版本追踪和管理员黄色一致性提醒；生产数据库两份增量迁移和结构核对通过，并发布到 GitHub Pages。OpenAI Sites 因源码仓库网络隔离及既有 Cloudflare 拦截没有记为本版发布成功。
 
 正式收集新版数据前必须确认 Supabase 项目已恢复运行、两份迁移均成功、当前网页构建已部署，并完成一次中英文、档案恢复及跨睡前与睡醒阶段的端到端试验。

@@ -2,7 +2,7 @@
 
 The public website contains only the Supabase publishable key. Final-session reads remain protected by Row Level Security (RLS) and a private administrator allow-list. Protocol v3 also uses a private, bearer-token-protected draft table so an overnight session can be resumed for up to 48 hours.
 
-> **Production release status — completed 2026-07-18:** the existing project ran `20260718_protocol_v3.sql` followed by `20260718_participant_profiles.sql`. Both transactions returned `Success. No rows returned`; all expected tables, functions, constraints, append-only triggers, and the administrator allow-list entry were verified. `study_sessions` contained zero rows before and after migration, so the historical count/fingerprint result remained unchanged. The matching website build was then released to GitHub Pages and OpenAI Sites.
+> **Production release status — completed 2026-07-18:** the existing project ran `20260718_protocol_v3.sql` followed by `20260718_participant_profiles.sql`. Both transactions returned `Success. No rows returned`; all expected tables, functions, constraints, append-only triggers, and the administrator allow-list entry were verified. `study_sessions` contained zero rows before and after migration, so the historical count/fingerprint result remained unchanged. The matching website build was then released to GitHub Pages. The OpenAI Sites source repository was unreachable from the restricted release network and its public domain still returned a Cloudflare block page, so that older address was not recorded as a successful deployment of this build.
 
 ## If the existing Supabase project is paused
 
