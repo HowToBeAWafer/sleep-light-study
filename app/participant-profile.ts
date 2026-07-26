@@ -1,9 +1,15 @@
 const RECOVERY_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 const RECOVERY_CODE_PATTERN = /^[A-Z2-7]{20}$/;
+const CREDENTIAL_PROOF_PATTERN = /^[0-9a-f]{64}$/i;
 const PROFILE_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const LOCAL_PROFILE_STORAGE_KEY = "sleep-light-study:participant-profiles:v1";
+const LEGACY_LOCAL_PROFILE_STORAGE_KEY = "sleep-light-study:participant-profiles:v1";
+const LOCAL_PROFILE_STORAGE_KEY = "sleep-light-study:participant-profiles:v2";
 const MAX_LOCAL_PROFILES = 20;
+const PARTICIPANT_PASSWORD_MIN_CHARACTERS = 8;
+const PARTICIPANT_PASSWORD_MAX_CHARACTERS = 128;
+const PARTICIPANT_PASSWORD_PBKDF2_ITERATIONS = 600_000;
+const PARTICIPANT_PASSWORD_SALT_DOMAIN = "sleep-light-study:participant-password:v1\0";
 
 export type ParticipantProfile = {
   profileId: string;
@@ -12,15 +18,33 @@ export type ParticipantProfile = {
   lastAccessedAt: string;
 };
 
-export type LocalParticipantProfile = ParticipantProfile & {
-  recoveryCode: string;
+export type ParticipantCredential =
+  | {
+      /** Legacy high-entropy recovery credential retained for existing profiles. */
+      recoveryCode: string;
+      credentialProof?: never;
+    }
+  | {
+      /** PBKDF2 proof derived from a user password; the password is never retained. */
+      credentialProof: string;
+      recoveryCode?: never;
+    };
+
+export type LocalParticipantProfile = ParticipantProfile & ParticipantCredential;
+
+type LocalProfileEnvelopeV1 = {
+  storageVersion: 1;
+  activeProfileId: string;
+  profiles: Array<ParticipantProfile & { recoveryCode: string }>;
 };
 
-type LocalProfileEnvelope = {
-  storageVersion: 1;
+type LocalProfileEnvelopeV2 = {
+  storageVersion: 2;
   activeProfileId: string;
   profiles: LocalParticipantProfile[];
 };
+
+type LocalProfileEnvelope = LocalProfileEnvelopeV1 | LocalProfileEnvelopeV2;
 
 export function normalizeParticipantName(value: string) {
   return value.normalize("NFKC").trim().replace(/\s+/gu, " ");
@@ -51,6 +75,14 @@ export function isValidRecoveryCode(value: string) {
   return RECOVERY_CODE_PATTERN.test(normalizeRecoveryCode(value));
 }
 
+export function isValidParticipantPassword(value: string) {
+  const characterCount = Array.from(value).length;
+  return (
+    characterCount >= PARTICIPANT_PASSWORD_MIN_CHARACTERS &&
+    characterCount <= PARTICIPANT_PASSWORD_MAX_CHARACTERS
+  );
+}
+
 export function generateParticipantRecoveryCode() {
   if (!globalThis.crypto?.getRandomValues) {
     throw new Error("Secure random-number generation is unavailable in this browser.");
@@ -79,6 +111,53 @@ export async function createRecoveryProof(recoveryCode: string) {
   return Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
 }
 
+/**
+ * Derives the bearer proof used by participant RPCs without retaining the
+ * participant's password. The canonical name is part of a domain-separated
+ * salt so the same password produces a different proof for another profile.
+ */
+export async function createParticipantPasswordProof(displayName: string, password: string) {
+  if (!isValidParticipantName(displayName)) {
+    throw new Error("The study name is not valid.");
+  }
+  if (!isValidParticipantPassword(password)) {
+    throw new Error("The password must contain between 8 and 128 characters.");
+  }
+  if (!globalThis.crypto?.subtle) {
+    throw new Error("Secure password derivation is unavailable in this browser.");
+  }
+
+  const encoder = new TextEncoder();
+  const keyMaterial = await globalThis.crypto.subtle.importKey(
+    "raw",
+    encoder.encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"],
+  );
+  const derived = await globalThis.crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      hash: "SHA-256",
+      iterations: PARTICIPANT_PASSWORD_PBKDF2_ITERATIONS,
+      salt: encoder.encode(`${PARTICIPANT_PASSWORD_SALT_DOMAIN}${participantNameKey(displayName)}`),
+    },
+    keyMaterial,
+    256,
+  );
+  return Array.from(new Uint8Array(derived), (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+export async function getParticipantCredentialProof(credential: ParticipantCredential) {
+  if (typeof credential.credentialProof === "string") {
+    if (!CREDENTIAL_PROOF_PATTERN.test(credential.credentialProof)) {
+      throw new Error("The participant credential proof is not valid.");
+    }
+    return credential.credentialProof.toLowerCase();
+  }
+  return createRecoveryProof(credential.recoveryCode);
+}
+
 export function isParticipantProfile(value: unknown): value is ParticipantProfile {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const profile = value as Record<string, unknown>;
@@ -95,27 +174,47 @@ export function isParticipantProfile(value: unknown): value is ParticipantProfil
   );
 }
 
-function isLocalParticipantProfile(value: unknown): value is LocalParticipantProfile {
+function isLegacyLocalParticipantProfile(
+  value: unknown,
+): value is ParticipantProfile & { recoveryCode: string } {
   if (!isParticipantProfile(value)) return false;
-  const profile = value as LocalParticipantProfile;
-  return isValidRecoveryCode(profile.recoveryCode);
+  const profile = value as Record<string, unknown>;
+  return (
+    typeof profile.recoveryCode === "string" &&
+    isValidRecoveryCode(profile.recoveryCode) &&
+    !("credentialProof" in profile)
+  );
 }
 
-function readLocalProfileEnvelope(): LocalProfileEnvelope | null {
-  if (typeof window === "undefined") return null;
+function isLocalParticipantProfile(value: unknown): value is LocalParticipantProfile {
+  if (!isParticipantProfile(value)) return false;
+  const profile = value as Record<string, unknown>;
+  const hasRecoveryCode = typeof profile.recoveryCode === "string";
+  const hasCredentialProof = typeof profile.credentialProof === "string";
+  return (
+    hasRecoveryCode !== hasCredentialProof &&
+    (
+      hasRecoveryCode
+        ? isValidRecoveryCode(profile.recoveryCode as string)
+        : CREDENTIAL_PROOF_PATTERN.test(profile.credentialProof as string)
+    )
+  );
+}
+
+function parseLocalProfileEnvelope(raw: string, expectedVersion: 1 | 2): LocalProfileEnvelope | null {
   try {
-    const raw = window.localStorage.getItem(LOCAL_PROFILE_STORAGE_KEY);
-    if (!raw) return null;
     const value: unknown = JSON.parse(raw);
     if (!value || typeof value !== "object" || Array.isArray(value)) return null;
     const envelope = value as Record<string, unknown>;
     if (
-      envelope.storageVersion !== 1 ||
+      envelope.storageVersion !== expectedVersion ||
       typeof envelope.activeProfileId !== "string" ||
       !PROFILE_ID_PATTERN.test(envelope.activeProfileId) ||
       !Array.isArray(envelope.profiles) ||
       envelope.profiles.length > MAX_LOCAL_PROFILES ||
-      !envelope.profiles.every(isLocalParticipantProfile)
+      !envelope.profiles.every(
+        expectedVersion === 1 ? isLegacyLocalParticipantProfile : isLocalParticipantProfile,
+      )
     ) {
       return null;
     }
@@ -127,11 +226,32 @@ function readLocalProfileEnvelope(): LocalProfileEnvelope | null {
     ) {
       return null;
     }
-    return {
-      storageVersion: 1,
-      activeProfileId: envelope.activeProfileId,
-      profiles,
-    };
+    return expectedVersion === 1
+      ? {
+          storageVersion: 1,
+          activeProfileId: envelope.activeProfileId,
+          profiles: profiles as LocalProfileEnvelopeV1["profiles"],
+        }
+      : {
+          storageVersion: 2,
+          activeProfileId: envelope.activeProfileId,
+          profiles,
+        };
+  } catch {
+    return null;
+  }
+}
+
+function readLocalProfileEnvelope(): LocalProfileEnvelope | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const current = window.localStorage.getItem(LOCAL_PROFILE_STORAGE_KEY);
+    if (current) {
+      const envelope = parseLocalProfileEnvelope(current, 2);
+      if (envelope) return envelope;
+    }
+    const legacy = window.localStorage.getItem(LEGACY_LOCAL_PROFILE_STORAGE_KEY);
+    return legacy ? parseLocalProfileEnvelope(legacy, 1) : null;
   } catch {
     return null;
   }
@@ -153,11 +273,15 @@ export function loadLocalParticipantProfile(displayName?: string) {
 
 export function rememberLocalParticipantProfile(profile: LocalParticipantProfile) {
   if (typeof window === "undefined" || !isLocalParticipantProfile(profile)) return false;
-  const canonicalProfile: LocalParticipantProfile = {
-    ...profile,
+  const canonicalBase: ParticipantProfile = {
+    profileId: profile.profileId,
     displayName: normalizeParticipantName(profile.displayName),
-    recoveryCode: normalizeRecoveryCode(profile.recoveryCode),
+    createdAt: profile.createdAt,
+    lastAccessedAt: profile.lastAccessedAt,
   };
+  const canonicalProfile: LocalParticipantProfile = typeof profile.credentialProof === "string"
+    ? { ...canonicalBase, credentialProof: profile.credentialProof.toLowerCase() }
+    : { ...canonicalBase, recoveryCode: normalizeRecoveryCode(profile.recoveryCode) };
   const current = readLocalProfileEnvelope()?.profiles ?? [];
   const key = participantNameKey(canonicalProfile.displayName);
   const profiles = [
@@ -169,8 +293,9 @@ export function rememberLocalParticipantProfile(profile: LocalParticipantProfile
   try {
     window.localStorage.setItem(
       LOCAL_PROFILE_STORAGE_KEY,
-      JSON.stringify({ storageVersion: 1, activeProfileId: canonicalProfile.profileId, profiles }),
+      JSON.stringify({ storageVersion: 2, activeProfileId: canonicalProfile.profileId, profiles }),
     );
+    window.localStorage.removeItem(LEGACY_LOCAL_PROFILE_STORAGE_KEY);
     return true;
   } catch {
     return false;
@@ -183,16 +308,19 @@ export function forgetLocalParticipantProfile(profileId?: string) {
     const envelope = readLocalProfileEnvelope();
     if (!envelope || profileId === undefined) {
       window.localStorage.removeItem(LOCAL_PROFILE_STORAGE_KEY);
+      window.localStorage.removeItem(LEGACY_LOCAL_PROFILE_STORAGE_KEY);
       return true;
     }
     const profiles = envelope.profiles.filter((profile) => profile.profileId !== profileId);
     if (profiles.length === 0) {
       window.localStorage.removeItem(LOCAL_PROFILE_STORAGE_KEY);
+      window.localStorage.removeItem(LEGACY_LOCAL_PROFILE_STORAGE_KEY);
     } else {
       window.localStorage.setItem(
         LOCAL_PROFILE_STORAGE_KEY,
-        JSON.stringify({ storageVersion: 1, activeProfileId: profiles[0].profileId, profiles }),
+        JSON.stringify({ storageVersion: 2, activeProfileId: profiles[0].profileId, profiles }),
       );
+      window.localStorage.removeItem(LEGACY_LOCAL_PROFILE_STORAGE_KEY);
     }
     return true;
   } catch {

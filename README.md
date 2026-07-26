@@ -11,18 +11,21 @@
 
 2026-07-18 双语姓名档案版本已完成生产数据库迁移，并发布到 GitHub Pages。OpenAI Sites 的源码仓库在当前受限网络中无法连接，而且该域名仍会向部分访问者显示 Cloudflare 拦截页，因此本次没有把它记录为新版发布成功；参与者只应使用 GitHub Pages。
 
+2026-07-23 的密码账户增量迁移 `20260723_password_accounts.sql` 已由项目负责人确认于 2026-07-26 在生产项目成功执行，SQL Editor 显示 `Success. No rows returned`。匹配的密码账户、教程关键词加粗、暴露前练习轮和管理员详细结果查看网页仍需完成部署及端到端核对；在这两项完成前，上述公开地址仍应视为 2026-07-18 版本。晨间邮件提醒原型已在生产发布前取消，网页不向参与者索取提醒邮箱。
+
 ## Protocol v3 实验流程
 
 1. 在首页切换 English / 中文，输入一个真实姓名或网名，并选择研究者分配的条件。
-2. 首次使用该姓名时，系统建立唯一档案并生成 20 位恢复码；返回者使用同一浏览器，或在其他设备输入姓名和恢复码，打开原档案。
-3. 查看该姓名已经完成和尚未完成的五种条件，再阅读所选语言的完整教程。
+2. 首次使用该姓名时选择一个 **8–128 个字符的密码**；同一浏览器刷新后会自动恢复已登录档案和进度，换浏览器或设备时用姓名和密码登录。
+3. 查看该姓名已经完成和尚未完成的五种条件，再阅读所选语言的完整教程。旧版 20 位恢复码持有者可在首次返回时升级为密码，原有会话和进度不会丢失。
 4. 网页通过浏览器输入能力自动判断 Phone、Tablet 或 Computer；参与者可在判断不准确时改正。
-5. 完成睡前问卷和第一次 Karolinska Sleepiness Scale（KSS 1–9）。
-6. 四种颜色条件进入五分钟全屏光照，并在期间呈现四次稀疏黑色十字；Control 不显示颜色、不改变亮度，也不进行五分钟注意力任务。
-7. 参与者开始当晚的正常睡眠。网页保存一份最多保留 48 小时的受保护草稿，用于第二天继续同一会话。
-8. 睡醒后返回网页，复核设备类别，完成第二次 KSS，然后按照放松、自然回应的说明完成一次练习和三次正式简单反应检查。
-9. 完整最终记录上传至 Supabase；网络失败时保留浏览器重试副本，并可导出 CSV/JSON。
-10. 参与者可在结果页选择 Feedback 或 Question 留言，也可以跳过。
+5. 四种颜色条件先进行一次带操作提示的独立练习轮；练习不保存、不上传，也不计入正式数据。Control 为避免额外屏幕暴露而跳过练习轮。
+6. 完成睡前问卷和第一次 Karolinska Sleepiness Scale（KSS 1–9）。
+7. 四种颜色条件进入五分钟全屏光照，并在期间呈现四次稀疏黑色十字；Control 不显示颜色、不改变亮度，也不进行五分钟注意力任务。
+8. 参与者开始当晚的正常睡眠。网页保存一份最多保留 48 小时的受保护草稿，用于第二天继续同一会话。
+9. 睡醒后返回网页，复核设备类别，完成第二次 KSS，然后按照放松、自然回应的说明完成一次练习和三次正式简单反应检查。
+10. 完整最终记录上传至 Supabase；网络失败时保留浏览器重试副本，并可导出 CSV/JSON。
+11. 参与者可在结果页选择 Feedback 或 Question 留言，也可以跳过。
 
 网页不会强制插入 washout day（洗脱日/空白日）。如果同一参与者需要完成多个条件，各次实验安排和间隔由研究方案及研究者控制，不由网站自动阻止或延后。
 
@@ -33,7 +36,8 @@
 | 阶段 | 中文教程 | English tutorial |
 | --- | --- | --- |
 | 实验前 | 每一次实验都尽量保持相同的设备、屏幕设置和睡眠环境。尽可能维持相近的室温、计划入睡时间、声音/噪音、灯光、睡前屏幕使用、音乐、咖啡因和助眠品习惯。请如实回答；不要为了让答案相同而填写不真实的信息。 | Keep the device, display settings, and sleep environment as similar as reasonably possible for every session. Aim for a similar temperature, intended sleep time, sound/noise, lighting, pre-sleep screen use, music, caffeine, and sleep-aid routine. Answer honestly; do not report an untrue answer just to make sessions match. |
-| 姓名与恢复 | 输入真名或网名。为了隐私，推荐使用不会直接识别你的网名。姓名在整个研究中必须唯一；首次建立档案后请私下保存 20 位恢复码，不要分享。 | Enter a real name or nickname. For privacy, a nickname that does not directly identify you is recommended. The study name must be unique; after creating it, privately save the 20-character recovery code and do not share it. |
+| 姓名与密码 | 输入真名或网名。为了隐私，推荐使用不会直接识别你的网名。姓名必须唯一，并选择一个 8–128 个字符、自己能记住的密码；换浏览器时用同一姓名和密码登录。 | Enter a real name or nickname. For privacy, a nickname that does not directly identify you is recommended. The study name must be unique; choose a memorable 8–128-character password and use the same name and password in a new browser. |
+| 暴露前练习 | 颜色条件会先显示暗色中性、不保存的引导练习：等待黑色十字出现，再按提示点击/轻触或按键，并练习暂停和结束控件。Control 跳过这一练习，避免增加额外屏幕暴露。 | Color conditions begin with an unsaved, dim-neutral guided practice: wait for the black cross, respond as instructed, and try the pause and end controls. Control skips this practice to avoid extra screen exposure. |
 | 颜色阶段 | 保持专注并看着屏幕。黑色十字出现时点击屏幕或按 Space/Enter。电脑按 P 暂停/继续并依次输入 E、N、D 终止；手机和平板使用屏幕底部按钮。 | Stay attentive and watch the screen. When a black cross appears, tap/click or press Space/Enter. On a computer, press P to pause/resume and type E, N, D in sequence to end; on a phone or tablet, use the bottom controls. |
 | Control | Control 没有颜色、亮度或十字阶段；完成睡前问卷后按平常方式睡一整晚。 | Control has no color, brightness, or cross task; after the pre-sleep questionnaire, sleep normally for the full night. |
 | 睡醒后 | 返回同一网页，完成睡醒 KSS 和一次练习加三次有效反应。请放松并自然回应，不需要刻意提高警觉。 | Return to the same site, complete the post-waking KSS, then one practice and three valid reactions. Stay relaxed and respond naturally; do not deliberately heighten alertness. |
@@ -45,9 +49,10 @@
 
 - `Participant ID` 在新界面中改为 **Study name / 实验姓名**，可以使用真名或网名；为减少不必要的个人身份信息，推荐不含邮箱、电话、学校编号等信息的网名。
 - 姓名经过 Unicode 规范化、大小写不敏感比较和连续空白合并后必须全局唯一。因此 `Sleepy Fox`、`sleepy  fox` 等形式属于同一个姓名。
-- 首次建立档案时生成 20 位恢复码。原始恢复码只保存在参与者浏览器或由参与者自行私下保存；数据库只接收和保存不可逆的哈希证明。
-- 恢复码用于在新设备上重新打开同一档案并查看该姓名的实验进度。它不是密码重置服务；遗失恢复码后，研究者不能从数据库还原原码。
-- 20 位档案恢复码用于长期姓名档案；64 位十六进制隔夜令牌只用于恢复一条 48 小时草稿。两者用途不同，不能互相替代。
+- 首次建立档案时由参与者选择 **8–128 个字符的密码**。浏览器先用慢速 PBKDF2 派生不可逆的凭证证明；数据库不接收或保存可显示的原始密码。
+- 同一浏览器会记住已登录档案并在刷新后自动恢复完成/剩余进度。新浏览器或新设备需要输入同一姓名和密码；网站不提供通过邮件重置参与者密码的服务。
+- 2026-07-18 版已经建立的档案仍可使用原 20 位恢复码完成一次性升级。升级只替换档案凭证，不删除、改写或重新归类既有会话、问卷、反馈和五条件进度。
+- 参与者密码用于长期姓名档案；64 位十六进制隔夜令牌只用于恢复一条 48 小时草稿。两者用途不同，不能互相替代。
 - 档案会显示五种条件中已经完成和仍然剩余的项目及历史完成记录，但不会自动决定下一个条件或实验顺序。
 - 相同姓名的每次会话都以新的会话 ID 追加到该档案，重复条件仍作为单独记录保留。
 
@@ -90,6 +95,12 @@ Protocol v3 为减少频繁目标造成的警觉性提高，将颜色条件中�
 电脑端可用 `Space` / `Enter` 回应、`P` 暂停/继续，并依次输入 `E`、`N`、`D` 提前终止颜色曝光。手机和平板使用底部 Pause/Resume 与需二次确认的 End 控件。暂停期间五分钟有效计时和十字计划一起冻结，暂停时长单独记录。
 
 历史 schema v2 会话仍保留原来的 20 次十字设计；数据库不会把旧数据改写成 v3。分析时必须按 `schemaVersion` 和 `attentionProtocolVersion` 分开处理两代协议。
+
+### 暴露前引导练习
+
+四种颜色条件在正式睡前问卷和五分钟暴露前加入一个隔离练习轮。练习使用低亮度的暗色中性背景，以逐步提示参与者等待黑色十字、点击/轻触或按 `Space` / `Enter`、暂停/继续，以及使用对应设备的结束控件。练习状态只存在于当前页面内，不调用 Supabase、不写入浏览器研究记录，也不进入正式十字、反应时、暂停或误点数据。
+
+Control 不运行这一练习，因为它的研究定义是不进行颜色、亮度或十字暴露；跳过练习可以避免给 Control 参与者增加额外的注意任务和屏幕时间。这个暴露前练习与睡醒后反应检查中的一次练习目的不同，两者都不计入各自的正式结果。
 
 ## 睡前和睡醒后问卷
 
@@ -170,6 +181,10 @@ Protocol v3 为减少频繁目标造成的警觉性提高，将颜色条件中�
 
 “受保护”指令牌哈希、私有表和最小 RPC 权限，不代表网页对草稿内容另外进行端到端加密。清除浏览器网站数据、丢失恢复令牌或超过 48 小时都可能导致无法继续。
 
+## 参与者联系方式
+
+本版本不提供晨间邮件提醒或参与者邮箱字段，也不会主动索取提醒邮箱。参与者不应把邮箱用作实验姓名或写入自由文本反馈。管理员用于 Supabase 登录的固定邮箱属于独立的研究者认证流程。
+
 ## 最终数据记录
 
 Schema v3 最终记录包含：
@@ -192,16 +207,34 @@ CSV 始终保留 `session_summary`；JSON 保存完整嵌套结构。显示姓�
 - 黄色提醒规则为：跨午夜正确计算后的入睡时间最小跨度 **超过 90 分钟**；温度等级跨度 **超过 1 级**；噪音等级跨度 **超过 1 级**；是否开灯或灯光颜色发生变化；或屏幕使用、入睡音乐、过去八小时咖啡因、助眠品四项中至少两项发生 Yes/No 变化。
 - 研究者分配的 Bright/Dim Red/Blue/Control 条件变化绝不会被当作环境不一致；`Prefer not to answer` 也不会凭空制造变化提醒。
 
+### 管理员详细结果查看
+
+管理员登录后仍先看到可搜索的会话摘要表。每条会话新增一个可展开的只读 **View details / 查看详情** 区域，在页面内按以下部分整理原始记录：
+
+- 会话、姓名档案、schema、协议、问卷和网页构建版本；
+- 条件、暴露、精确时间点、时长和终止信息；
+- 睡前问卷全部回答、睡前/睡醒后 KSS 原始分值与对应量表标签；
+- 睡前和睡醒后设备、设备是否变化；
+- 注意力计划与实际试次、无目标/额外点击、暂停和页面/全屏事件；
+- 三次有效反应结果、平均值、中位数、提前响应和漏答次数；
+- 反馈/问题及环境一致性人工复核信息；
+- 按需展开的完整、已校验 JSON payload。
+
+长数组在详情中每页显示 50 条，只有当前展开的会话会渲染详细内容。页面保留单次和全部 CSV/JSON 下载，详细查看不会替代研究导出。时间、毫秒值和标识符会保留精确值，不只显示四舍五入摘要。
+
+该功能复用管理员已经获得的完整只读会话、档案和反馈结果，不新增数据库写入、SQL、RPC 或 RLS 权限。自由文本和 JSON 作为普通 React 文本显示，不作为 HTML 注入。历史 schema v2 没有采集的 v3 问卷、设备、反应检查或档案字段会明确显示为 **Not collected in schema v2 / schema v2 未收集**，不会猜测、补值或改写旧记录。
+
 ## 数据保存与权限
 
 - 未登录参与者只能新增符合约束的最终 `completed` / `terminated` 记录，不能读取、修改或删除最终记录。
 - 只有 Supabase Auth 中已确认并加入私有 allow-list 的管理员可以读取远程记录。
 - 浏览器保留最终上传失败的重试副本；远程保存成功后清除相应副本。
 - `test` 和 `admin` 都不能作为正式实验姓名写入数据库。
+- 参与者姓名/密码凭证与管理员 Supabase Auth 是两套独立机制；参与者不会成为 Supabase Auth 用户。
 - 每个新会话写入不可变的 `studyBuildVersion`，以便回答始终可以追溯到当时的网页版本。
 - 数据库升级采用 additive migration（增量迁移）：旧 schema v2、旧 schema v3、先前问卷答案和反馈不会被新版本覆盖、改写或自动删除。新的会话、回答和反馈始终追加为新记录。
 
-数据库首次设置、现有项目升级和管理员步骤见 [`SUPABASE_SETUP.md`](./SUPABASE_SETUP.md)。已有 v2 项目必须先执行 [`supabase/migrations/20260718_protocol_v3.sql`](./supabase/migrations/20260718_protocol_v3.sql)，再执行档案迁移 [`supabase/migrations/20260718_participant_profiles.sql`](./supabase/migrations/20260718_participant_profiles.sql)。当前生产项目已于 2026-07-18 按此顺序完成两份迁移；迁移前后 `study_sessions` 均为 0 条，因此历史记录计数和指纹保持一致。
+数据库首次设置、现有项目升级和管理员步骤见 [`SUPABASE_SETUP.md`](./SUPABASE_SETUP.md)。已有 v2 项目必须先执行 [`supabase/migrations/20260718_protocol_v3.sql`](./supabase/migrations/20260718_protocol_v3.sql)，再执行档案迁移 [`supabase/migrations/20260718_participant_profiles.sql`](./supabase/migrations/20260718_participant_profiles.sql)。当前生产项目已于 2026-07-18 按此顺序完成两份迁移；迁移前后 `study_sessions` 均为 0 条，因此历史记录计数和指纹保持一致。项目负责人又确认 [`20260723_password_accounts.sql`](./supabase/migrations/20260723_password_accounts.sql) 已于 2026-07-26 在同一生产项目成功执行；网页部署和端到端核对仍作为独立发布步骤记录。
 
 ## 内置研究者入口
 
@@ -211,7 +244,7 @@ CSV 始终保留 `session_summary`；JSON 保存完整嵌套结构。显示姓�
 
 ### 管理员
 
-实验姓名输入 `admin` 会进入 Supabase 邮箱密码登录页。管理员页面支持搜索、刷新、分页读取、姓名档案进度、反馈/问题、黄色环境一致性提醒，以及下载单次或全部 CSV/JSON。Email provider 必须保持开启；只关闭 **Allow new users to sign up / Enable sign ups**，不要关闭 Email provider 本身。
+实验姓名输入 `admin` 会进入 Supabase 邮箱密码登录页。管理员页面支持搜索、刷新、分页读取、姓名档案进度、反馈/问题、黄色环境一致性提醒、在页面内展开单次会话的完整分类详情，以及下载单次或全部 CSV/JSON。详情查看是只读的，不会修改、排除或删除记录。Email provider 必须保持开启；只关闭 **Allow new users to sign up / Enable sign ups**，不要关闭 Email provider 本身。
 
 ## 本地运行
 
@@ -232,8 +265,10 @@ npm test
 ## 主要文件
 
 - `app/page.tsx`：完整过夜流程和实验状态协调
+- `app/admin-session-details.tsx`：管理员页面内的分类、只读会话详情
 - `app/study-tutorial.tsx`：中英双语完整实验教程
-- `app/participant-profile.ts`：唯一姓名、恢复码和本地档案
+- `app/attention-practice.tsx`：颜色条件的隔离、不保存引导练习轮
+- `app/participant-profile.ts`：唯一姓名、密码凭证证明、旧恢复码兼容和本地已登录档案
 - `app/consistency-review.ts`：管理员环境一致性提醒与五条件历史摘要
 - `app/session-feedback.tsx`：完成后的版本化反馈/问题窗口
 - `app/protocol-v3.ts`：v3 条件、KSS、问卷、设备和反应检查数据契约
@@ -245,6 +280,7 @@ npm test
 - `supabase/setup.sql`：全新数据库完整设置
 - `supabase/migrations/20260718_protocol_v3.sql`：现有 v2 数据库升级到 v3
 - `supabase/migrations/20260718_participant_profiles.sql`：唯一姓名档案、历史关联、反馈和只追加保护；生产项目已执行
+- `supabase/migrations/20260723_password_accounts.sql`：把旧恢复码档案安全升级为参与者密码凭证；项目负责人确认生产项目已于 2026-07-26 执行
 - [`BUILD_LOG.md`](./BUILD_LOG.md)：按时间保留的搭建与协议变更日志
 - [`SUPABASE_SETUP.md`](./SUPABASE_SETUP.md)：Supabase 恢复、迁移和权限设置
 
@@ -257,6 +293,7 @@ npm test
 - 浏览器行为计时为近似值，后台节流、设备休眠、锁屏和设备差异会影响记录。
 - 草稿恢复依赖 48 小时内仍持有正确令牌；最终远程上传依赖网络。
 - 匿名最终写入和令牌式草稿接口保护读取权限，但不能证明每次提交都来自真实受试者。公开招募时应考虑一次性 Participant token、服务器端限流或 Edge Function。
+- 暗色引导练习仍会增加少量、参与者操作速度相关的屏幕时间，而且仅存在于颜色条件。正式研究方案应明确把它作为标准化训练步骤，预实验评估其影响；不要把网页颜色值当作实际照度校准。
 - 四个颜色条件与旧版 20 次注意力数据不得直接混合分析；必须按协议版本区分。
 
 ## 版本状态
@@ -264,5 +301,7 @@ npm test
 - 2026-07-11：发布 schema v2，包括 Supabase 最终上传、管理员仪表板和触摸设备控制。
 - 2026-07-18：加入 Protocol v3 源码与数据库迁移，包括四次稀疏十字、正常睡眠 Control、前后 KSS、睡眠/环境问卷、前后设备记录、三次反应检查和 48 小时草稿恢复。
 - 2026-07-18：完成中英双语、唯一姓名档案与恢复码、五条件进度、只追加反馈、构建版本追踪和管理员黄色一致性提醒；生产数据库两份增量迁移和结构核对通过，并发布到 GitHub Pages。OpenAI Sites 因源码仓库网络隔离及既有 Cloudflare 拦截没有记为本版发布成功。
+- 2026-07-23：本地源码加入 8–128 字符参与者密码、刷新自动恢复、跨浏览器姓名/密码登录、旧恢复码无损升级、教程关键词加粗，以及颜色条件的独立不保存练习轮；Control 跳过练习以避免额外暴露。晨间邮件提醒原型在生产发布前取消，从未执行生产迁移或收集生产邮箱。
+- 2026-07-26：项目负责人确认生产项目成功执行 `20260723_password_accounts.sql`。源码构建版本更新为 `2026-07-26-password-practice-admin-results-v1`，并加入管理员页面内的分类只读详细结果查看；匹配网页部署和端到端核对仍需在发布时单独完成。
 
-正式收集新版数据前必须确认 Supabase 项目已恢复运行、两份迁移均成功、当前网页构建已部署，并完成一次中英文、档案恢复及跨睡前与睡醒阶段的端到端试验。
+正式收集该版本数据前必须确认 Supabase 项目运行正常，复核两份 2026-07-18 迁移和已执行的 `20260723_password_accounts.sql`，部署构建 `2026-07-26-password-practice-admin-results-v1`，并完成一次中英文、账户建立、密码登录、刷新恢复、练习、跨睡前与睡醒阶段、最终保存、管理员分类详情和文件下载的端到端试验。

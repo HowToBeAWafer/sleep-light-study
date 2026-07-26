@@ -75,6 +75,7 @@ export type CsvSessionRecord = {
     atIso: string;
   }>;
   pauses: Array<{
+    pauseNumber: number;
     startedElapsedMs: number;
     startedAtIso: string;
     endedAtIso: string | null;

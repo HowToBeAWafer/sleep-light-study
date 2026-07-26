@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import type { Language } from "./i18n";
 import type { ConditionId } from "./protocol-v3";
 
@@ -34,7 +33,6 @@ type StudyTutorialProps = {
   displayName: string;
   assignedConditionId: ConditionId;
   completedConditionIds: ConditionId[];
-  recoveryCode: string | null;
   isTestMode: boolean;
   onContinue: () => void;
 };
@@ -44,25 +42,13 @@ export function StudyTutorial({
   displayName,
   assignedConditionId,
   completedConditionIds,
-  recoveryCode,
   isTestMode,
   onContinue,
 }: StudyTutorialProps) {
-  const [copied, setCopied] = useState(false);
   const zh = language === "zh";
   const completed = new Set(completedConditionIds);
   const remaining = ALL_CONDITIONS.filter((conditionId) => !completed.has(conditionId));
   const assignedWasCompleted = completed.has(assignedConditionId);
-
-  const copyRecoveryCode = async () => {
-    if (!recoveryCode) return;
-    try {
-      await navigator.clipboard.writeText(recoveryCode);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
-  };
 
   return (
     <main className="tutorial-shell">
@@ -79,20 +65,17 @@ export function StudyTutorial({
           </p>
         </header>
 
-        {recoveryCode && !isTestMode ? (
-          <aside className="recovery-code-card" aria-label={zh ? "档案恢复码" : "Profile recovery code"}>
+        {!isTestMode ? (
+          <aside className="recovery-code-card" aria-label={zh ? "登录状态" : "Sign-in status"}>
             <div>
-              <strong>{zh ? "请保存你的恢复码" : "Save your recovery code"}</strong>
+              <strong>{zh ? "你的档案已登录" : "Your profile is signed in"}</strong>
               <p>
                 {zh
-                  ? "同一浏览器会自动记住。换手机、平板或电脑时，需要此码才能继续使用同一个姓名并查看完成进度。"
-                  : "This browser remembers it automatically. You will need it to use the same study name on another phone, tablet, or computer."}
+                  ? "本浏览器会记住派生登录凭证而不是你的密码。下次刷新或返回时，可以继续查看以前的进度。"
+                  : "This browser remembers a derived sign-in credential, not your password, so your prior progress can load after refreshing or returning."}
               </p>
             </div>
-            <code>{recoveryCode}</code>
-            <button type="button" className="secondary-button" onClick={copyRecoveryCode}>
-              {copied ? (zh ? "已复制" : "Copied") : (zh ? "复制恢复码" : "Copy recovery code")}
-            </button>
+            <code>{displayName}</code>
           </aside>
         ) : null}
 
@@ -134,16 +117,46 @@ export function StudyTutorial({
             ) : null}
           </div>
           <ol className="tutorial-flow-list">
-            <li>{zh ? "颜色条件：专注看五分钟画面；出现黑色十字时点击屏幕或按空格。" : "Color conditions: watch the five-minute display and respond when a black cross appears."}</li>
-            <li>{zh ? "对照条件：不播放颜色或亮度画面，直接按照平常方式睡一整晚。" : "Control: no color or brightness display; sleep a normal full night."}</li>
-            <li>{zh ? "准备放下设备睡觉时，点击“我要睡觉了”；睡醒后使用同一浏览器返回。" : "When putting the device away, mark that you are going to sleep; return in the same browser after waking."}</li>
-            <li>{zh ? "网站不强制隔一天；请严格按照研究者安排的日期和顺序。" : "The website does not force a washout day; follow the researcher’s assigned dates and order."}</li>
+            <li>
+              {zh ? <><strong>颜色条件：</strong>专注观看<strong>五分钟</strong>画面；出现<strong>黑色十字</strong>时，立即<strong>点击屏幕或按 Space/Enter</strong>。</> : <><strong>Color conditions:</strong> watch the <strong>five-minute</strong> display and <strong>click, tap, or press Space/Enter</strong> when a <strong>black cross</strong> appears.</>}
+            </li>
+            <li>
+              {zh ? <><strong>暂停/继续：</strong>电脑按 <strong>P</strong>；触屏设备使用底部的 <strong>Pause/Resume</strong> 按钮。</> : <><strong>Pause/Resume:</strong> press <strong>P</strong> on a computer or use the bottom <strong>Pause/Resume</strong> buttons on a touch device.</>}
+            </li>
+            <li>
+              {zh ? <><strong>提前结束：</strong>电脑依次输入 <strong>E → N → D</strong>；触屏设备在三秒内点击两次 <strong>End</strong>。</> : <><strong>End early:</strong> type <strong>E → N → D</strong> on a computer or tap <strong>End twice</strong> within three seconds on a touch device.</>}
+            </li>
+            <li>
+              {zh ? <><strong>对照条件：</strong>不播放颜色或亮度画面，直接按照平常方式<strong>正常睡一整晚</strong>。</> : <><strong>Control:</strong> no color or brightness display; get a <strong>normal full night of sleep</strong>.</>}
+            </li>
+            <li>
+              {zh ? <>准备放下设备时点击<strong>“我要睡觉了”</strong>；睡醒后使用<strong>同一浏览器</strong>返回。</> : <>Select <strong>“I am going to sleep now”</strong> when putting the device away, then return in the <strong>same browser</strong> after waking.</>}
+            </li>
+            <li>
+              {zh ? <>网站不强制隔一天；请严格遵循<strong>研究者安排的日期和顺序</strong>。</> : <>The website does not force a washout day; follow the researcher’s <strong>assigned dates and order</strong>.</>}
+            </li>
           </ol>
         </section>
 
+        {assignedConditionId !== "control" ? (
+          <section className="tutorial-section" aria-labelledby="practice-preview-title">
+            <div className="tutorial-section-heading">
+              <span>03</span>
+              <div>
+                <h2 id="practice-preview-title">{zh ? "先完成一个简短试验轮" : "Complete one short practice round"}</h2>
+                <p>
+                  {zh
+                    ? <>教程之后会用暗色中性画面练习十字反应、暂停/继续和结束操作。<strong>试验轮不会保存，也不会计入正式结果。</strong></>
+                    : <>After this tutorial, a dim neutral screen will guide you through the cross response, pause/resume, and end controls. <strong>The practice is not saved and does not count toward the study results.</strong></>}
+                </p>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
         <section className="tutorial-section" aria-labelledby="progress-title">
           <div className="tutorial-section-heading">
-            <span>03</span>
+            <span>{assignedConditionId === "control" ? "03" : "04"}</span>
             <div>
               <h2 id="progress-title">{zh ? "你的完成记录" : "Your condition record"}</h2>
               <p>
@@ -166,11 +179,13 @@ export function StudyTutorial({
 
         <p className="tutorial-privacy-note">
           {isTestMode
-            ? (zh ? "测试模式不会保存档案、实验记录或反馈。" : "Test mode does not save profiles, sessions, or feedback.")
+            ? (zh ? <>测试模式<strong>不会保存</strong>档案、实验记录或反馈。</> : <>Test mode <strong>does not save</strong> profiles, sessions, or feedback.</>)
             : (zh ? "姓名或网名必须唯一。为减少可识别信息，建议使用一个不会暴露身份的网名。" : "Study names must be unique. A non-identifying nickname is recommended to reduce personal information.")}
         </p>
         <button className="primary-button tutorial-continue" type="button" onClick={onContinue}>
-          {zh ? "我已阅读——继续填写睡前问卷" : "I have read this — continue to the pre-sleep questionnaire"}
+          {assignedConditionId === "control"
+            ? (zh ? "我已阅读——继续填写睡前问卷" : "I have read this — continue to the pre-sleep questionnaire")
+            : (zh ? "我已阅读——开始简短试验轮" : "I have read this — start the short practice")}
         </button>
       </section>
     </main>

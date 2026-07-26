@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { isTouchCapable } from "./device-controls";
 import {
@@ -14,14 +14,14 @@ import {
 import { clearReactionTestProgress, ReactionTest } from "./reaction-test";
 import {
   ADMIN_EMAIL,
-  claimParticipantProfile,
   deleteStudyDraft,
   fetchAdminParticipantFeedback,
   fetchAdminParticipantProfiles,
   fetchParticipantProgress,
   fetchRemoteStudySessions,
-  generateParticipantRecoveryCode,
+  forgetLocalParticipantProfile,
   isAdminParticipantId,
+  isValidParticipantPassword,
   isValidParticipantName,
   isValidRecoveryCode,
   isStoredSessionRecord,
@@ -31,7 +31,9 @@ import {
   normalizeParticipantName,
   normalizeRecoveryCode,
   rememberLocalParticipantProfile,
+  registerParticipantAccount,
   saveStudyDraft,
+  signInParticipantAccount,
   signInAdmin,
   submitParticipantFeedback,
   type AdminParticipantFeedback,
@@ -42,6 +44,7 @@ import {
   type StoredSessionRecord,
   uploadProfileStudySession,
   uploadStudySession,
+  upgradeLegacyParticipantAccount,
 } from "./remote-storage";
 import type {
   AttentionInputMethod,
@@ -59,16 +62,19 @@ import { sessionToCsv, sessionsToCsv } from "./study-data";
 import { PostStudySurveyForm, PreStudySurveyForm } from "./study-surveys";
 import { StudyTutorial } from "./study-tutorial";
 import { SessionFeedback, type SessionFeedbackPayload } from "./session-feedback";
+import { AttentionPractice } from "./attention-practice";
 import {
   groupParticipantHistories,
   normalizeParticipantName as normalizeParticipantHistoryName,
 } from "./consistency-review";
 import { isLanguage, type Language } from "./i18n";
+import { AdminSessionDetails } from "./admin-session-details";
 
 type Phase =
   | "setup"
   | "admin"
   | "tutorial"
+  | "practice"
   | "pre-survey"
   | "instructions"
   | "countdown"
@@ -81,6 +87,8 @@ type Phase =
   | "results";
 
 type RemoteSaveStatus = "idle" | "saving" | "saved" | "failed";
+type ParticipantAccountMode = "create" | "signin";
+type ParticipantProgressStatus = "idle" | "loading" | "loaded" | "failed";
 type DraftProtection = {
   sessionId: string | null;
   localSaved: boolean;
@@ -141,8 +149,9 @@ const SESSION_DURATION_MS = 5 * 60 * 1000;
 const CROSS_VISIBLE_MS = 1800;
 const FINAL_STORAGE_KEY = "sleep-light-study:sessions:v2";
 const OVERNIGHT_DRAFT_KEY = "sleep-light-study:overnight-draft:v1";
+const RETIRED_EMAIL_PLAN_KEY = "sleep-light-study:morning-reminder-plan:v1";
 const LANGUAGE_STORAGE_KEY = "sleep-light-study:language:v1";
-const STUDY_BUILD_VERSION = "2026-07-18-bilingual-profiles-v1";
+const STUDY_BUILD_VERSION = "2026-07-26-password-practice-admin-results-v1";
 const DRAFT_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 const MINIMUM_SLEEP_INTERVAL_MS = 4 * 60 * 60 * 1000;
 
@@ -416,6 +425,7 @@ function AdminPortal({ language, onExit }: { language: Language; onExit: () => v
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [invalidRemoteCount, setInvalidRemoteCount] = useState(0);
+  const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
   const requestIdRef = useRef(0);
 
   useEffect(() => () => {
@@ -447,6 +457,11 @@ function AdminPortal({ language, onExit }: { language: Language; onExit: () => v
       }
       if (requestIdRef.current !== requestId) return;
       setSessions(remoteResult.sessions);
+      setExpandedSessionId((current) => (
+        current && remoteResult.sessions.some(({ record }) => record.sessionId === current)
+          ? current
+          : null
+      ));
       setProfiles(allProfiles);
       setFeedback(allFeedback);
       setInvalidRemoteCount(remoteResult.invalidCount);
@@ -496,6 +511,9 @@ function AdminPortal({ language, onExit }: { language: Language; onExit: () => v
   ), [participantHistories]);
   const profileByName = useMemo(() => new Map(
     profiles.map((profile) => [normalizeParticipantHistoryName(profile.displayName), profile]),
+  ), [profiles]);
+  const profileById = useMemo(() => new Map(
+    profiles.map((profile) => [profile.profileId, profile]),
   ), [profiles]);
   const feedbackBySession = useMemo(() => {
     const grouped = new Map<string, AdminParticipantFeedback[]>();
@@ -579,6 +597,7 @@ function AdminPortal({ language, onExit }: { language: Language; onExit: () => v
                 setInvalidRemoteCount(0);
                 setError("");
                 setSearch("");
+                setExpandedSessionId(null);
               }}
             >
               {tr(language, "Sign out", "退出登录")}
@@ -654,6 +673,7 @@ function AdminPortal({ language, onExit }: { language: Language; onExit: () => v
                   <th>{tr(language, "Attention", "注意任务")}</th>
                   <th>{tr(language, "Feedback / question", "反馈 / 问题")}</th>
                   <th>{tr(language, "Files", "文件")}</th>
+                  <th>{tr(language, "Details", "详细结果")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -663,53 +683,96 @@ function AdminPortal({ language, onExit }: { language: Language; onExit: () => v
                   const hits = record.trials.filter((trial) => trial.status === "hit").length;
                   const normalizedName = normalizeParticipantHistoryName(record.participantId);
                   const history = reviewByName.get(normalizedName);
-                  const profile = profileByName.get(normalizedName);
+                  const exactProfile = v3?.participantProfileId
+                    ? profileById.get(v3.participantProfileId)
+                    : undefined;
+                  const historicalProfile = profileByName.get(normalizedName);
+                  const profile = exactProfile ?? historicalProfile;
+                  const profileMatch = exactProfile
+                    ? "profile-id" as const
+                    : historicalProfile
+                      ? "normalized-name" as const
+                      : "none" as const;
                   const sessionFeedback = feedbackBySession.get(record.sessionId) ?? [];
+                  const isExpanded = expandedSessionId === record.sessionId;
+                  const detailsId = `admin-session-details-${record.sessionId}`;
                   const reviewTitle = history?.consistencyReview.reasons
                     .map((reason) => reason.label[language])
                     .join(" ");
                   return (
-                    <tr key={record.sessionId}>
-                      <td>{record.participantId}</td>
-                      <td>
-                        {history?.consistencyReview.needsReview ? (
-                          <details>
-                            <summary className="admin-review-flag" title={reviewTitle} aria-label={tr(language, `Needs careful review: ${reviewTitle}`, `需要认真复核：${reviewTitle}`)}><span aria-hidden="true">⚠</span>{tr(language, "Review carefully", "认真复核")}</summary>
-                            <ul className="admin-review-reasons">
-                              {history.consistencyReview.reasons.map((reason) => (
-                                <li key={reason.key}>{reason.label[language]}</li>
-                              ))}
-                            </ul>
-                          </details>
-                        ) : <span aria-label={tr(language, "No automatic environment warning", "没有自动环境警告")}>—</span>}
-                      </td>
-                      <td>
-                        <strong>{conditionLabel(record.conditionId, language)}</strong>
-                        {profile ? <small>{profile.completedConditionIds.length}/5 {tr(language, "conditions complete", "项条件已完成")}</small> : null}
-                      </td>
-                      <td>{new Date(record.startedAtIso).toLocaleString(language === "zh" ? "zh-CN" : "en")}</td>
-                      <td>v{record.schemaVersion}{v3?.studyBuildVersion ? <small>{v3.studyBuildVersion}</small> : <small>{tr(language, "historical", "历史版本")}</small>}</td>
-                      <td><span className={`status-pill ${record.status}`}>{record.status}</span></td>
-                      <td>{v3?.preSurvey.sleepinessKss ?? "—"}</td>
-                      <td>{v3?.postSurvey?.sleepinessKss ?? "—"}</td>
-                      <td>{v3?.reactionTest?.averageReactionTimeMs == null ? "—" : `${Math.round(v3.reactionTest.averageReactionTimeMs)} ms`}</td>
-                      <td>{v3?.conditionId === "control" ? tr(language, "N/A", "不适用") : `${hits}/${record.trials.length}`}</td>
-                      <td>
-                        {sessionFeedback.length ? sessionFeedback.map((item) => (
-                          <details className="admin-feedback-details" key={item.feedbackId}>
-                            <summary>{item.messageType === "question" ? tr(language, "Question", "问题") : tr(language, "Feedback", "反馈")}</summary>
-                            <p className="admin-feedback-entry">{item.message}</p>
-                            <small>{new Date(item.createdAt).toLocaleString(language === "zh" ? "zh-CN" : "en")}</small>
-                          </details>
-                        )) : "—"}
-                      </td>
-                      <td>
-                        <div className="admin-file-actions">
-                          <button type="button" onClick={() => downloadRemoteSession(session, "csv")}>CSV</button>
-                          <button type="button" onClick={() => downloadRemoteSession(session, "json")}>JSON</button>
-                        </div>
-                      </td>
-                    </tr>
+                    <Fragment key={record.sessionId}>
+                      <tr>
+                        <td>{record.participantId}</td>
+                        <td>
+                          {history?.consistencyReview.needsReview ? (
+                            <details>
+                              <summary className="admin-review-flag" title={reviewTitle} aria-label={tr(language, `Needs careful review: ${reviewTitle}`, `需要认真复核：${reviewTitle}`)}><span aria-hidden="true">⚠</span>{tr(language, "Review carefully", "认真复核")}</summary>
+                              <ul className="admin-review-reasons">
+                                {history.consistencyReview.reasons.map((reason) => (
+                                  <li key={reason.key}>{reason.label[language]}</li>
+                                ))}
+                              </ul>
+                            </details>
+                          ) : <span aria-label={tr(language, "No automatic environment warning", "没有自动环境警告")}>—</span>}
+                        </td>
+                        <td>
+                          <strong>{conditionLabel(record.conditionId, language)}</strong>
+                          {profile ? <small>{profile.completedConditionIds.length}/5 {tr(language, "conditions complete", "项条件已完成")}</small> : null}
+                        </td>
+                        <td>{new Date(record.startedAtIso).toLocaleString(language === "zh" ? "zh-CN" : "en")}</td>
+                        <td>v{record.schemaVersion}{v3?.studyBuildVersion ? <small>{v3.studyBuildVersion}</small> : <small>{tr(language, "historical", "历史版本")}</small>}</td>
+                        <td><span className={`status-pill ${record.status}`}>{record.status}</span></td>
+                        <td>{v3?.preSurvey.sleepinessKss ?? "—"}</td>
+                        <td>{v3?.postSurvey?.sleepinessKss ?? "—"}</td>
+                        <td>{v3?.reactionTest?.averageReactionTimeMs == null ? "—" : `${Math.round(v3.reactionTest.averageReactionTimeMs)} ms`}</td>
+                        <td>{v3?.conditionId === "control" ? tr(language, "N/A", "不适用") : `${hits}/${record.trials.length}`}</td>
+                        <td>
+                          {sessionFeedback.length ? sessionFeedback.map((item) => (
+                            <details className="admin-feedback-details" key={item.feedbackId}>
+                              <summary>{item.messageType === "question" ? tr(language, "Question", "问题") : tr(language, "Feedback", "反馈")}</summary>
+                              <p className="admin-feedback-entry">{item.message}</p>
+                              <small>{new Date(item.createdAt).toLocaleString(language === "zh" ? "zh-CN" : "en")}</small>
+                            </details>
+                          )) : "—"}
+                        </td>
+                        <td>
+                          <div className="admin-file-actions">
+                            <button type="button" onClick={() => downloadRemoteSession(session, "csv")}>CSV</button>
+                            <button type="button" onClick={() => downloadRemoteSession(session, "json")}>JSON</button>
+                          </div>
+                        </td>
+                        <td>
+                          <button
+                            className="admin-view-details-button"
+                            type="button"
+                            aria-expanded={isExpanded}
+                            aria-controls={detailsId}
+                            onClick={() => setExpandedSessionId(isExpanded ? null : record.sessionId)}
+                          >
+                            {isExpanded
+                              ? tr(language, "Hide details", "收起详情")
+                              : tr(language, "View details", "查看详情")}
+                          </button>
+                        </td>
+                      </tr>
+                      {isExpanded ? (
+                        <tr className="admin-details-row">
+                          <td colSpan={13}>
+                            <div id={detailsId}>
+                              <AdminSessionDetails
+                                language={language}
+                                session={session}
+                                profile={profile ?? null}
+                                profileMatch={profileMatch}
+                                feedback={sessionFeedback}
+                                history={history}
+                                onDownload={(format) => downloadRemoteSession(session, format)}
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -727,9 +790,13 @@ export default function Home() {
   const [phase, setPhase] = useState<Phase>("setup");
   const [language, setLanguage] = useState<Language>("en");
   const [participantId, setParticipantId] = useState("");
+  const [participantAccountMode, setParticipantAccountMode] = useState<ParticipantAccountMode>("create");
+  const [participantPassword, setParticipantPassword] = useState("");
+  const [participantPasswordConfirmation, setParticipantPasswordConfirmation] = useState("");
   const [participantRecoveryCodeInput, setParticipantRecoveryCodeInput] = useState("");
   const [participantProfile, setParticipantProfile] = useState<LocalParticipantProfile | null>(null);
   const [participantProgress, setParticipantProgress] = useState<ParticipantProgress | null>(null);
+  const [participantProgressStatus, setParticipantProgressStatus] = useState<ParticipantProgressStatus>("idle");
   const [profileChecking, setProfileChecking] = useState(false);
   const [feedbackSaving, setFeedbackSaving] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
@@ -803,6 +870,16 @@ export default function Home() {
   const touchEndArmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchEndArmedRef = useRef(false);
   const controlModeOverrideRef = useRef<"touch" | "keyboard" | null>(null);
+
+  useEffect(() => {
+    // The email-reminder prototype never shipped, but remove its preview-only
+    // browser value once so no retired contact data can linger on test devices.
+    try {
+      localStorage.removeItem(RETIRED_EMAIL_PLAN_KEY);
+    } catch {
+      // Storage access is optional and must not block the study.
+    }
+  }, []);
   const paintFrameRef = useRef<number | null>(null);
   const scheduleNextCrossRef = useRef<() => void>(() => undefined);
   const displayActiveTrialRef = useRef<() => void>(() => undefined);
@@ -844,6 +921,44 @@ export default function Home() {
       document.documentElement.lang = preferred === "zh" ? "zh-CN" : "en";
     }, 0);
     return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      const storedProfile = loadLocalParticipantProfile();
+      if (!storedProfile) return;
+      setParticipantId(storedProfile.displayName);
+      if ("credentialProof" in storedProfile) {
+        setProfileChecking(true);
+        setParticipantProgressStatus("loading");
+        void fetchParticipantProgress(storedProfile).then((progress) => {
+          if (cancelled) return;
+          participantProfileRef.current = storedProfile;
+          setParticipantProfile(storedProfile);
+          setParticipantProgress(progress);
+          setParticipantProgressStatus("loaded");
+          setFormError("");
+        }, () => {
+          if (cancelled) return;
+          participantProfileRef.current = null;
+          setParticipantProfile(null);
+          setParticipantProgress(null);
+          setParticipantProgressStatus("failed");
+          setParticipantAccountMode("signin");
+          setFormError("This browser's saved sign-in could not be verified. Enter your password to sign in again; if the network is unavailable, try later. / 无法验证本浏览器保存的登录状态。请重新输入密码登录；如果网络不可用，请稍后再试。");
+        }).finally(() => {
+          if (!cancelled) setProfileChecking(false);
+        });
+      } else {
+        setParticipantAccountMode("signin");
+        setParticipantRecoveryCodeInput(storedProfile.recoveryCode);
+      }
+    }, 0);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, []);
 
   useEffect(() => {
@@ -930,7 +1045,16 @@ export default function Home() {
       participantProfileRef.current = matchingProfile;
       setParticipantProfile(matchingProfile);
       if (matchingProfile) {
-        void fetchParticipantProgress(matchingProfile).then(setParticipantProgress, () => undefined);
+        setParticipantProgressStatus("loading");
+        void fetchParticipantProgress(matchingProfile).then((progress) => {
+          setParticipantProgress(progress);
+          setParticipantProgressStatus("loaded");
+        }, () => {
+          setParticipantProgressStatus("failed");
+          setFormError("Your overnight progress was restored, but the participant account could not be verified. Keep this browser record and contact the researcher before final submission. / 整晚进度已恢复，但无法验证参与者账户。请保留此浏览器中的记录，并在最终提交前联系研究者。");
+        });
+      } else {
+        setParticipantProgressStatus("idle");
       }
       conditionRef.current = restoredRecord.conditionId;
       sessionIdRef.current = restoredRecord.sessionId;
@@ -1137,14 +1261,18 @@ export default function Home() {
     const saveRequest = record.participantProfileId
       ? profile?.profileId === record.participantProfileId
         ? uploadProfileStudySession(profile, record, { keepalive: true })
-        : Promise.reject(new Error("The participant profile recovery code is unavailable."))
+        : Promise.reject(new Error("The participant profile credential is unavailable."))
       : uploadStudySession(record, { keepalive: true });
     void saveRequest.then(
       () => {
         if (!removeStoredSession(record.sessionId)) setStorageAvailable(false);
         onSuccess?.();
         if (profile) {
-          void fetchParticipantProgress(profile).then(setParticipantProgress, () => undefined);
+          setParticipantProgressStatus("loading");
+          void fetchParticipantProgress(profile).then((progress) => {
+            setParticipantProgress(progress);
+            setParticipantProgressStatus("loaded");
+          }, () => setParticipantProgressStatus("failed"));
         }
         setRemoteSave((current) => (
           current.sessionId === record.sessionId
@@ -1869,12 +1997,12 @@ export default function Home() {
       participantInputRef.current?.focus();
       return;
     }
-
     if (isTestParticipantId(cleanParticipantId)) {
       try {
         participantProfileRef.current = null;
         setParticipantProfile(null);
         setParticipantProgress(null);
+        setParticipantProgressStatus("idle");
         initializeSession(cleanParticipantId, conditionId);
         setFormError("");
         setPhase("tutorial");
@@ -1884,47 +2012,123 @@ export default function Home() {
       return;
     }
 
+    const activeProfile = participantProfileRef.current;
+    if (
+      activeProfile
+      && normalizeParticipantName(activeProfile.displayName).toLowerCase() === cleanParticipantId.toLowerCase()
+    ) {
+      if (participantProgressStatus !== "loaded" || !participantProgress) {
+        setProfileChecking(true);
+        setParticipantProgressStatus("loading");
+        try {
+          const progress = await fetchParticipantProgress(activeProfile);
+          setParticipantProgress(progress);
+          setParticipantProgressStatus("loaded");
+        } catch {
+          setParticipantProgressStatus("failed");
+          setFormError(tr(
+            language,
+            "Your account is remembered, but its progress could not be loaded. Check the connection and press Begin again, or sign out and sign in with your password.",
+            "浏览器记住了你的账户，但暂时无法读取进度。请检查网络后再次点击开始，或退出后使用密码重新登录。",
+          ));
+          return;
+        } finally {
+          setProfileChecking(false);
+        }
+      }
+      initializeSession(
+        activeProfile.displayName,
+        conditionId,
+        activeProfile.profileId,
+      );
+      setFormError("");
+      setPhase("tutorial");
+      return;
+    }
+
+    if (!isValidParticipantPassword(participantPassword)) {
+      setFormError(tr(language, "Use a password containing 8–128 characters.", "请输入 8–128 个字符的密码。"));
+      document.getElementById("participant-password")?.focus();
+      return;
+    }
+
     const suppliedRecoveryCode = participantRecoveryCodeInput.trim();
     if (suppliedRecoveryCode && !isValidRecoveryCode(suppliedRecoveryCode)) {
       setFormError(tr(language, "The recovery code should contain 20 characters using A–Z or 2–7. Check it and try again.", "恢复码应包含 20 个字符，只使用 A–Z 或数字 2–7。请检查后重试。"));
       return;
     }
+    if (
+      (participantAccountMode === "create" || suppliedRecoveryCode)
+      && participantPassword !== participantPasswordConfirmation
+    ) {
+      setFormError(tr(language, "The two passwords do not match.", "两次输入的密码不一致。"));
+      document.getElementById("participant-password-confirmation")?.focus();
+      return;
+    }
 
     setProfileChecking(true);
     setFormError("");
+    let openedProfile: LocalParticipantProfile | null = null;
     try {
       const rememberedProfile = loadLocalParticipantProfile(cleanParticipantId);
-      const recoveryCode = suppliedRecoveryCode
+      const rememberedLegacyCode = rememberedProfile && "recoveryCode" in rememberedProfile
+        ? rememberedProfile.recoveryCode
+        : null;
+      const legacyCode = suppliedRecoveryCode
         ? normalizeRecoveryCode(suppliedRecoveryCode)
-        : rememberedProfile?.recoveryCode ?? generateParticipantRecoveryCode();
-      const claimedProfile = await claimParticipantProfile(cleanParticipantId, recoveryCode);
-      const localProfile: LocalParticipantProfile = {
-        profileId: claimedProfile.profileId,
-        displayName: claimedProfile.displayName,
-        createdAt: claimedProfile.createdAt,
-        lastAccessedAt: claimedProfile.lastAccessedAt,
-        recoveryCode: claimedProfile.recoveryCode,
-      };
+        : rememberedLegacyCode;
+      const localProfile = legacyCode
+        ? await upgradeLegacyParticipantAccount(cleanParticipantId, legacyCode, participantPassword)
+        : participantAccountMode === "create"
+          ? await registerParticipantAccount(cleanParticipantId, participantPassword)
+          : await signInParticipantAccount(cleanParticipantId, participantPassword);
+      openedProfile = localProfile;
       if (!rememberLocalParticipantProfile(localProfile)) setStorageAvailable(false);
-      const progress = await fetchParticipantProgress(localProfile);
       participantProfileRef.current = localProfile;
       setParticipantProfile(localProfile);
-      setParticipantProgress(progress);
+      setParticipantProgress(null);
+      setParticipantProgressStatus("loading");
       setParticipantId(localProfile.displayName);
+      setParticipantPassword("");
+      setParticipantPasswordConfirmation("");
       setParticipantRecoveryCodeInput("");
-      initializeSession(localProfile.displayName, conditionId, localProfile.profileId);
+      const progress = await fetchParticipantProgress(localProfile);
+      setParticipantProgress(progress);
+      setParticipantProgressStatus("loaded");
+      initializeSession(
+        localProfile.displayName,
+        conditionId,
+        localProfile.profileId,
+      );
       setFormError("");
       setPhase("tutorial");
     } catch (error) {
       const message = error instanceof Error ? error.message : "";
-      const nameConflict = /already in use|recovery code|did not match|authentication failed/i.test(message);
+      if (openedProfile) {
+        setParticipantProgressStatus("failed");
+        setParticipantAccountMode("signin");
+        setFormError(tr(
+          language,
+          "Your account was opened, but its progress could not be loaded. Check the connection and press Begin again; the account and its previous records were not lost.",
+          "账户已经打开，但暂时无法读取进度。请检查网络后再次点击开始；账户和以前的记录都没有丢失。",
+        ));
+        return;
+      }
+      const nameConflict = /already in use|already has an account/i.test(message);
+      const credentialMismatch = /did not match|authentication failed|could not be opened|recovery code/i.test(message);
       const serviceUnavailable = /failed to fetch|network|could not find|not found|schema cache|unavailable/i.test(message);
       setFormError(nameConflict
         ? tr(
           language,
-          "This study name is already in use. If it is yours, use the original browser or enter its recovery code; otherwise choose a different unique nickname.",
-          "这个实验姓名已经被使用。如果它属于你，请使用原浏览器或输入恢复码；否则请选择另一个独一无二的网名。",
+          "This study name already has an account. Choose Sign in, or use a different unique nickname.",
+          "这个实验姓名已经有账户。请选择“登录”，或使用另一个独一无二的网名。",
         )
+        : credentialMismatch
+          ? tr(
+            language,
+            "The study name and password did not match. Check both and try again. Older accounts can be upgraded with their original recovery code.",
+            "实验姓名与密码不匹配，请检查后重试。旧账户可以使用原来的恢复码升级。",
+          )
         : serviceUnavailable
           ? tr(
             language,
@@ -1960,7 +2164,8 @@ export default function Home() {
   const markSleepStarted = () => {
     const record = overnightRecordRef.current;
     if (!record) return;
-    const nextRecord: StudySessionRecordV3 = { ...record, sleepStartedAtIso: new Date().toISOString() };
+    const sleepStartedAt = new Date();
+    const nextRecord: StudySessionRecordV3 = { ...record, sleepStartedAtIso: sleepStartedAt.toISOString() };
     const savedLocally = saveOvernightDraft(nextRecord, { requireLocal: true });
     if (!savedLocally && !isTestParticipantId(record.participantId)) {
       setFormError(tr(language, "The sleep-start checkpoint could not be saved in this browser. Enable site storage and try again before closing the page.", "无法在此浏览器保存入睡节点。请允许网站存储，然后在关闭页面前重试。"));
@@ -2117,14 +2322,25 @@ export default function Home() {
   };
 
   const resetToSetup = () => {
-    setParticipantId("");
+    const activeProfile = participantProfileRef.current;
+    setParticipantId(activeProfile?.displayName ?? "");
+    setParticipantPassword("");
+    setParticipantPasswordConfirmation("");
     setParticipantRecoveryCodeInput("");
     setConditionId(null);
     setResult(null);
-    setParticipantProfile(null);
-    setParticipantProgress(null);
-    participantProfileRef.current = null;
-    participantProfileIdRef.current = null;
+    setParticipantProfile(activeProfile);
+    if (activeProfile) {
+      setParticipantProgressStatus("loading");
+      void fetchParticipantProgress(activeProfile).then((progress) => {
+        setParticipantProgress(progress);
+        setParticipantProgressStatus("loaded");
+      }, () => setParticipantProgressStatus("failed"));
+    } else {
+      setParticipantProgress(null);
+      setParticipantProgressStatus("idle");
+      participantProfileIdRef.current = null;
+    }
     setFeedbackSaving(false);
     setFeedbackSubmitted(false);
     setFeedbackSkipped(false);
@@ -2147,15 +2363,28 @@ export default function Home() {
         displayName={participantId}
         assignedConditionId={conditionId}
         completedConditionIds={participantProgress?.completedConditionIds ?? []}
-        recoveryCode={participantProfile?.recoveryCode ?? null}
         isTestMode={setupIsTestMode}
-        onContinue={() => setPhase("pre-survey")}
+        onContinue={() => setPhase(conditionId === "control" ? "pre-survey" : "practice")}
       />
     );
   }
 
   if (phase === "pre-survey") {
     return <PreStudySurveyForm language={language} detectedDevice={detectedDevice} onSubmit={submitPreSurvey} />;
+  }
+
+  if (phase === "practice") {
+    return (
+      <AttentionPractice
+        language={language}
+        useTouchControls={useTouchControls}
+        onControlModeChange={(next) => {
+          controlModeOverrideRef.current = next ? "touch" : "keyboard";
+          setUseTouchControls(next);
+        }}
+        onComplete={() => setPhase("pre-survey")}
+      />
+    );
   }
 
   if (phase === "instructions") {
@@ -2189,7 +2418,9 @@ export default function Home() {
             )}
           </ul>
           <p className="instruction-reminder">
-            {tr(language, "Responses made when no cross is visible, including extra responses, are recorded. After exposure, continue to a normal full night of sleep.", "没有十字时的点击或多余点击也会被记录。光照结束后，请继续正常睡一整晚。")}
+            {language === "zh"
+              ? <><strong>没有十字时的点击或多余点击也会被记录。</strong>光照结束后，请继续<strong>正常睡一整晚</strong>。</>
+              : <><strong>Responses made when no cross is visible, including extra responses, are recorded.</strong> After exposure, continue to a <strong>normal full night of sleep</strong>.</>}
           </p>
           {!setupIsTestMode ? (
             <p
@@ -2625,46 +2856,160 @@ export default function Home() {
             </span>
           </div>
 
-          <label className="field-label" htmlFor="participant-id">{tr(language, "Study name (real name or nickname)", "实验姓名（真实姓名或网名）")}</label>
-          <input
-            ref={participantInputRef}
-            id="participant-id"
-            className="participant-input"
-            value={participantId}
-            onChange={(event) => {
-              setParticipantId(event.target.value);
-              setFormError("");
-            }}
-            placeholder={tr(language, "e.g. MoonRiver", "例如：月亮河")}
-            autoComplete="off"
-            maxLength={80}
-            required
-            aria-invalid={Boolean(formError && !participantId.trim())}
-            aria-describedby={formError ? "setup-error" : undefined}
-          />
-          {!setupIsAdminMode && !setupIsTestMode ? (
+          {participantProfile ? (
+            <div className="participant-account-card" role="status">
+              <div>
+                <span>{tr(language, "Signed in", "已登录")}</span>
+                <strong>{participantProfile.displayName}</strong>
+                <small>
+                  {participantProgressStatus === "loaded" && participantProgress
+                    ? tr(
+                        language,
+                        `${participantProgress.completedConditionIds.length} of 5 conditions completed`,
+                        `已完成 5 项中的 ${participantProgress.completedConditionIds.length} 项`,
+                      )
+                    : participantProgressStatus === "failed"
+                      ? tr(language, "Progress unavailable — press Begin to retry", "暂时无法读取进度——点击开始可重试")
+                      : tr(language, "Loading your saved progress…", "正在读取之前的进度…")}
+                </small>
+              </div>
+              <button
+                type="button"
+                className="secondary-button account-switch-button"
+                onClick={() => {
+                  forgetLocalParticipantProfile(participantProfile.profileId);
+                  setParticipantProfile(null);
+                  participantProfileRef.current = null;
+                  setParticipantProgress(null);
+                  setParticipantProgressStatus("idle");
+                  setParticipantId("");
+                  setParticipantPassword("");
+                  setParticipantPasswordConfirmation("");
+                  setParticipantRecoveryCodeInput("");
+                  setFormError("");
+                }}
+              >
+                {tr(language, "Use another account", "使用其他账户")}
+              </button>
+            </div>
+          ) : (
             <>
-              <p className="profile-field-help">
-                {tr(language, "Your name must be unique. A non-identifying nickname is recommended; use the exact same spelling every time.", "姓名必须独一无二。建议使用不会暴露身份的网名，并且每次都使用完全相同的写法。")}
-              </p>
-              <details className="recovery-access-details">
-                <summary>{tr(language, "Returning on another device? Enter your recovery code", "换了设备？请输入恢复码")}</summary>
-                <div className="recovery-access-fields">
-                  <label className="field-label" htmlFor="participant-recovery-code">{tr(language, "20-character recovery code", "20 位恢复码")}</label>
+              <label className="field-label" htmlFor="participant-id">{tr(language, "Study name (real name or nickname)", "实验姓名（真实姓名或网名）")}</label>
+              <input
+                ref={participantInputRef}
+                id="participant-id"
+                className="participant-input"
+                value={participantId}
+                onChange={(event) => {
+                  setParticipantId(event.target.value);
+                  setFormError("");
+                }}
+                placeholder={tr(language, "e.g. MoonRiver", "例如：月亮河")}
+                autoComplete="username"
+                maxLength={80}
+                required
+                aria-invalid={Boolean(formError && !participantId.trim())}
+                aria-describedby={formError ? "setup-error" : undefined}
+              />
+              {!setupIsAdminMode && !setupIsTestMode ? (
+                <>
+                  <p className="profile-field-help">
+                    {tr(language, "Your name must be unique. A non-identifying nickname is recommended.", "姓名必须独一无二，建议使用不会暴露身份的网名。")}
+                  </p>
+                  <div className="account-mode-switch" role="group" aria-label={tr(language, "Choose account action", "选择账户操作")}>
+                    <button
+                      type="button"
+                      aria-pressed={participantAccountMode === "create"}
+                      onClick={() => {
+                        setParticipantAccountMode("create");
+                        setParticipantRecoveryCodeInput("");
+                        setFormError("");
+                      }}
+                    >
+                      {tr(language, "Create account", "创建账户")}
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={participantAccountMode === "signin"}
+                      onClick={() => {
+                        setParticipantAccountMode("signin");
+                        setParticipantPasswordConfirmation("");
+                        setParticipantRecoveryCodeInput("");
+                        setFormError("");
+                      }}
+                    >
+                      {tr(language, "Sign in", "登录")}
+                    </button>
+                  </div>
+                  <label className="field-label" htmlFor="participant-password">
+                    {participantAccountMode === "create"
+                      ? tr(language, "Choose a password", "设置密码")
+                      : tr(language, "Password", "密码")}
+                  </label>
                   <input
-                    id="participant-recovery-code"
-                    value={participantRecoveryCodeInput}
-                    onChange={(event) => setParticipantRecoveryCodeInput(event.target.value.toUpperCase())}
-                    placeholder="AAAAA-BBBBB-CCCCC-DDDDD"
-                    autoComplete="off"
-                    inputMode="text"
-                    maxLength={32}
+                    id="participant-password"
+                    className="participant-input account-password-input"
+                    type="password"
+                    value={participantPassword}
+                    onChange={(event) => {
+                      setParticipantPassword(event.target.value);
+                      setFormError("");
+                    }}
+                    autoComplete={participantAccountMode === "create" ? "new-password" : "current-password"}
+                    minLength={8}
+                    maxLength={128}
+                    required
                   />
-                  <small>{tr(language, "The same browser remembers your code automatically. Never share it publicly.", "同一浏览器会自动记住恢复码，请不要公开分享。")}</small>
-                </div>
-              </details>
+                  {participantAccountMode === "create" || participantRecoveryCodeInput ? (
+                    <>
+                      <label className="field-label" htmlFor="participant-password-confirmation">{tr(language, "Confirm password", "确认密码")}</label>
+                      <input
+                        id="participant-password-confirmation"
+                        className="participant-input account-password-input"
+                        type="password"
+                        value={participantPasswordConfirmation}
+                        onChange={(event) => {
+                          setParticipantPasswordConfirmation(event.target.value);
+                          setFormError("");
+                        }}
+                        autoComplete="new-password"
+                        minLength={8}
+                        maxLength={128}
+                        required
+                      />
+                    </>
+                  ) : null}
+                  <p className="password-privacy-note">
+                    {tr(
+                      language,
+                      "Use 8–128 characters. Your password is converted into a slow cryptographic proof in this browser; the password itself is not saved or sent. There is no automatic password reset, so keep it in a password manager.",
+                      "请使用 8–128 个字符。密码会在本浏览器中转换成较慢的加密凭证；密码本身不会被保存或发送。目前没有自动重置密码功能，请将密码保存在密码管理器中。",
+                    )}
+                  </p>
+                  <details className="recovery-access-details">
+                    <summary>{tr(language, "Used the older recovery-code version? Upgrade this account", "使用过旧版恢复码？升级这个账户")}</summary>
+                    <div className="recovery-access-fields">
+                      <label className="field-label" htmlFor="participant-recovery-code">{tr(language, "Original 20-character recovery code", "原来的 20 位恢复码")}</label>
+                      <input
+                        id="participant-recovery-code"
+                        value={participantRecoveryCodeInput}
+                        onChange={(event) => {
+                          setParticipantRecoveryCodeInput(event.target.value.toUpperCase());
+                          setParticipantAccountMode("signin");
+                          setFormError("");
+                        }}
+                        placeholder="AAAAA-BBBBB-CCCCC-DDDDD"
+                        autoComplete="off"
+                        inputMode="text"
+                        maxLength={32}
+                      />
+                      <small>{tr(language, "Enter the old recovery code and choose a new password above. Existing records stay attached to the same profile.", "输入旧恢复码，并在上方设置新密码；以前的记录仍会保留在同一个档案中。")}</small>
+                    </div>
+                  </details>
+                </>
+              ) : null}
             </>
-          ) : null}
+          )}
 
           {setupIsTestMode ? (
             <p className="test-mode-note" role="status">{tr(language, "Test mode is active. It can be repeated and never saves participant data.", "测试模式已启用，可以反复使用且不会保存参与者数据。")}</p>

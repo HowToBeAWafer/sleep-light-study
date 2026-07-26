@@ -1,8 +1,46 @@
 # Supabase setup for Sleep Light Study
 
-The public website contains only the Supabase publishable key. Final-session reads remain protected by Row Level Security (RLS) and a private administrator allow-list. Protocol v3 also uses a private, bearer-token-protected draft table so an overnight session can be resumed for up to 48 hours.
+The public website contains only the Supabase publishable key. Final-session reads remain protected by Row Level Security (RLS) and a private administrator allow-list. Protocol v3 also uses a private, bearer-token-protected draft table so an overnight session can be resumed for up to 48 hours. Participant study-name/password credentials are separate from Supabase Auth. The participant website has no participant-email field and does not solicit reminder addresses; participants should not enter an email as their study name or in free-text feedback.
 
 > **Production release status — completed 2026-07-18:** the existing project ran `20260718_protocol_v3.sql` followed by `20260718_participant_profiles.sql`. Both transactions returned `Success. No rows returned`; all expected tables, functions, constraints, append-only triggers, and the administrator allow-list entry were verified. `study_sessions` contained zero rows before and after migration, so the historical count/fingerprint result remained unchanged. The matching website build was then released to GitHub Pages. The OpenAI Sites source repository was unreachable from the restricted release network and its public domain still returned a Cloudflare block page, so that older address was not recorded as a successful deployment of this build.
+
+## 2026-07-23 password-account production migration and release
+
+> **Production migration status — owner-confirmed 2026-07-26:** the project owner reports that the complete `20260723_password_accounts.sql` ran successfully in the production project and SQL Editor displayed `Success. No rows returned`. The migration step is therefore no longer pending. The matching `2026-07-26-password-practice-admin-results-v1` website deployment and the release end-to-end check remain separate pending steps. The morning-email prototype was cancelled before production and is not part of this release.
+
+The production project already has both 2026-07-18 migrations and the owner-confirmed password migration. Complete the remaining release checks in this order:
+
+1. Record an appropriate backup and confirm the 2026-07-18 profile verification queries still pass.
+2. Run the password-account verification query below against production. Do not rerun or replace participant history merely to obtain a second success message.
+3. Deploy the matching `2026-07-26-password-practice-admin-results-v1` website build.
+4. Complete the password-account, administrator, bilingual, practice, overnight-resume, final-save, cross-browser sign-in, in-page detailed-result review, and CSV/JSON download tests.
+
+### Participant-password model
+
+- A participant chooses an 8–128-character password for a unique study name. The browser derives a slow PBKDF2 credential proof; the raw password is not sent to PostgreSQL.
+- Existing July 18 profiles keep every linked session, survey, progress entry, feedback item, and build version. `upgrade_participant_profile_credential` verifies the old 20-character recovery-code proof once and replaces only the stored credential hash.
+- New and upgraded participants use the existing profile claim/progress RPCs with the password-derived proof. A returning participant can sign in from another browser with the same study name and password.
+- Participant accounts do **not** use Supabase Auth and do not need Auth sign-up enabled. Supabase Email Auth remains enabled only for the administrator dashboard as described under **Authentication settings**.
+
+Verify the additive credential-upgrade function by its exact name:
+
+```sql
+select routine_name
+from information_schema.routines
+where routine_schema = 'public'
+  and routine_name = 'upgrade_participant_profile_credential';
+
+select
+  has_function_privilege(
+    'anon',
+    'public.upgrade_participant_profile_credential(text,text,text)',
+    'EXECUTE'
+  ) as anon_can_upgrade_legacy_profile;
+```
+
+Expected: one `upgrade_participant_profile_credential` row and `anon_can_upgrade_legacy_profile = true`.
+
+The cancelled reminder migration and worker must not be deployed. If an earlier manual test ever created reminder database objects, an Edge Function, Cron entry, or reminder secrets, remove them before release and confirm that the participant page never asks for an email address.
 
 ## If the existing Supabase project is paused
 
@@ -38,9 +76,9 @@ The migration is backward-compatible. It preserves all existing schema v2 rows a
 
 It does not transform historical 20-trial v2 payloads into v3 payloads.
 
-## Add bilingual participant profiles, progress, and feedback
+## Historical 2026-07-18 profile migration, progress, and feedback
 
-Run this additive migration only after the Protocol v3 migration above is confirmed. It is required by the release that replaces Participant ID entry with a unique real-name-or-nickname profile, recovery code, five-condition progress, versioned feedback/questions, and administrator consistency review.
+This section records how the 2026-07-18 recovery-code release was migrated and verified. Keep it for audit and restoration, but do not instruct new 2026-07-23 participants to create recovery-code profiles; the pending release uses study name plus password. Run this additive migration only after the Protocol v3 migration above is confirmed when restoring a project that does not yet have participant profiles.
 
 **Current production status:** [`supabase/migrations/20260718_participant_profiles.sql`](./supabase/migrations/20260718_participant_profiles.sql) was run successfully on 2026-07-18 after the Protocol v3 migration. The following steps remain the required audit procedure for another existing project or a future restoration:
 
@@ -66,12 +104,12 @@ Run this additive migration only after the Protocol v3 migration above is confir
 
 The migration is additive. It creates private profile, session-link, and feedback tables plus narrowly scoped RPCs. It does not rename, convert, update, or delete any existing v2/v3 session or questionnaire answer. It also installs append-only database protection: final study sessions and submitted feedback cannot be updated or deleted through ordinary application paths. Every new site session carries `studyBuildVersion`, while each feedback/question carries its prompt version and site build version, so future releases remain distinguishable without replacing prior answers.
 
-### Profile and privacy model
+### Historical July 18 profile and privacy model
 
 - A study name may be a real name or nickname. The participant UI recommends a non-identifying nickname and warns against entering email, phone, student number, or similar identifiers.
 - Names are NFKC-normalized, trimmed, have internal whitespace collapsed, and are compared case-insensitively. The normalized value is unique, so cosmetic case or spacing changes cannot create duplicate profiles.
 - The browser generates a 20-character recovery code. The raw code stays in the browser or with the participant; the client sends a SHA-256 proof and the database stores a second SHA-256 hash, not the displayable code.
-- Possession of the matching name and recovery code permits that participant to reopen the profile and see only its completed/remaining five-condition progress. The RPC does not choose the next condition or enforce an order.
+- In the July 18 build, possession of the matching name and recovery code permitted that participant to reopen the profile and see only its completed/remaining five-condition progress. The RPC did not choose the next condition or enforce an order. The 2026-07-23 migration upgrades this credential in place to the participant's password-derived proof.
 - A lost recovery code cannot be reconstructed from its database hash. Project owners should not manually expose or replace profile history to bypass this control.
 
 ### Append-only feedback and consistency review
@@ -79,6 +117,12 @@ The migration is additive. It creates private profile, session-link, and feedbac
 Each post-session Feedback or Question is inserted as a separate record with its own ID, timestamp, language, prompt version, and build version. A later message never overwrites an earlier one.
 
 The admin dashboard computes a yellow review warning from completed v3 histories when circular sleep-time spread is over 90 minutes, temperature or noise spans more than one ordinal category, sleep-light use/color changes, or at least two of screen use, music, caffeine, and sleep-aid use change. Assigned Bright/Dim Red/Blue/Control differences are experimental conditions and are never flagged. The warning is for manual review only; it does not update, exclude, or delete data.
+
+### Read-only in-page session review
+
+The administrator dashboard can expand one session at a time and organize its already-fetched, validated payload into record/profile provenance, condition and exposure, exact timeline and durations, pre/post surveys, device records, attention trials, false/extra clicks, pauses, environment events, reaction results, feedback, and consistency-review sections. Large event arrays are paged in groups of 50. A raw validated JSON view is available only when the administrator explicitly expands it, and the existing single/all CSV and JSON downloads remain available.
+
+This viewer is a client-side presentation change. It uses the same authenticated full-session reads, profile RPC, feedback RPC, administrator allow-list, and RLS policies that already protect the summary dashboard. It adds no database writes, tables, SQL migrations, RPCs, grants, or RLS policies. Free text and JSON are rendered as ordinary escaped React text rather than executable HTML. For historical schema v2 records, fields introduced only in v3 are labelled **Not collected in schema v2**; the dashboard must not infer, backfill, or rewrite them.
 
 ## Set up a completely new project
 
@@ -89,10 +133,11 @@ Use this path only when the database has never been initialized.
 3. Open **SQL Editor → New query**.
 4. Paste and run the complete contents of [`supabase/setup.sql`](./supabase/setup.sql).
 5. A normal successful run displays `Success. No rows returned`.
-6. Run the verification queries below.
-7. Run the profile verification queries below. The current `setup.sql` already contains the profile/feedback objects, so a database initialized from this current file does not need the separate existing-project migration.
+6. Run the Protocol v3 and profile verification queries below. The current `setup.sql` already contains the 2026-07-18 profile/feedback objects, so a database initialized from this file does not need either separate 2026-07-18 migration.
+7. Run the complete `20260723_password_accounts.sql` and verify `upgrade_participant_profile_credential`. This additive 2026-07-23 migration is **not** included in `setup.sql` and is required even for a completely new project.
+8. Complete the password, administrator, bilingual, practice, overnight-resume, final-save, and cross-browser sign-in tests before publishing the matching website.
 
-The current setup script creates the final-session table, RLS policies, private administrator allow-list, v2/v3-compatible constraints, v3 overnight-draft functions, unique-name profiles, progress links, append-only feedback and history-protection triggers. The administrator Auth user must exist before the script runs because its immutable Auth UUID is inserted into the allow-list. `20260718_participant_profiles.sql` is for upgrading the existing project without recreating it.
+The current setup script creates the final-session table, RLS policies, private administrator allow-list, v2/v3-compatible constraints, v3 overnight-draft functions, unique-name profiles, progress links, append-only feedback and history-protection triggers. The administrator Auth user must exist before the script runs because its immutable Auth UUID is inserted into the allow-list. `20260718_participant_profiles.sql` is for upgrading the existing project without recreating it; `20260723_password_accounts.sql` must follow `setup.sql` because it has intentionally not been folded into the base script.
 
 ## Verification queries
 
@@ -189,6 +234,8 @@ It should contain the confirmed administrator email. Do not copy the Auth UUID i
 4. Do not disable the Email provider itself.
 5. Keep the administrator password private. Never place a database password, secret key, or `service_role` key in the website or GitHub repository.
 
+These settings apply to the administrator only. Participant study-name/password accounts are implemented by the private participant-profile table and scoped RPCs; they do not create Supabase Auth users and do not require public Auth registration. The participant website has no participant-email field; participants should not put an email in their study name or free-text feedback.
+
 The current administrator flow uses password authentication. Do not require MFA unless both the website login and database authorization are upgraded to verify an `aal2` session.
 
 ## Final-session access rules
@@ -238,13 +285,15 @@ Medication/supplement use is deliberately coarse (`yes`, `no`, or `prefer-not-to
 - **The migration says the project is unavailable:** finish restoring/resuming the Supabase project and wait for the API to become healthy.
 - **A v3 upload fails with a condition or 20-trial constraint:** the v3 migration was not applied to the database used by the deployed site.
 - **A profile/name request reports that an RPC is missing:** `20260718_participant_profiles.sql` is still pending or was run against a different Supabase project. Do not deploy the profile-enabled site until its verification succeeds.
-- **A name is already in use:** enter that profile's original recovery code. Case and spacing variants intentionally resolve to the same unique normalized name; do not create a cosmetic duplicate.
-- **A recovery code was lost:** the stored hashes cannot reconstruct it. Follow the study's documented lost-profile procedure rather than editing or deleting prior history.
+- **A name is already in use:** sign in with that profile's password. Case and spacing variants intentionally resolve to the same unique normalized name; do not create a cosmetic duplicate.
+- **A participant has a July 18 recovery code:** use the legacy-upgrade path once, choose a new 8–128-character password, and verify that the existing progress remains. Do not create a second cosmetic name.
+- **A participant password was lost:** the stored proof cannot reconstruct the password, and the website has no email-reset channel. Follow the study's documented lost-profile procedure rather than editing or deleting prior history.
+- **The password-upgrade RPC is missing:** run and verify `20260723_password_accounts.sql` before deploying the password-account website.
 - **A yellow consistency warning appears:** inspect the bilingual reason list and the original session answers. It is a manual-review prompt, not proof of invalid data, and must not trigger deletion or automatic exclusion.
 - **Admin login fails after public registration was disabled:** verify that Email provider remains enabled; only sign-ups should be disabled.
 - **Admin login works but no records appear:** verify the signed-in Auth UUID is present in `private.study_admins` and that the site points to this project.
-- **An overnight draft cannot be recovered:** verify the original 64-character token is still available and less than 48 hours old. A study name or 20-character profile recovery code cannot replace the separate overnight token.
+- **An overnight draft cannot be recovered:** verify the original 64-character token is still available and less than 48 hours old. A study name and participant password (or a legacy July 18 recovery code) cannot replace the separate overnight token.
 - **A participant returns after 48 hours:** the draft is expired by design. Do not bypass the expiry by editing a production row manually; follow the study's missing-session procedure.
 - **SQL Editor reports a failure inside the migration:** the transaction rolls back. Fix the reported issue and rerun the complete migration; do not assume a partial upgrade succeeded.
 
-Existing final sessions on Supabase remain available after every additive migration. Old v2/v3 questionnaire answers, new profile-linked sessions, and submitted feedback/questions remain separate historical records and are never overwritten by a later website version. Drafts or retry records stored only on a participant's device cannot be reconstructed by the administrator if the participant loses the corresponding browser data, overnight resume token, or profile recovery code.
+Existing final sessions on Supabase remain available after every additive migration. Old v2/v3 questionnaire answers, new profile-linked sessions, and submitted feedback/questions remain separate historical records and are never overwritten by a later website version. Drafts or retry records stored only on a participant's device cannot be reconstructed by the administrator if the participant loses the corresponding browser data or overnight resume token; participant password proofs and legacy recovery-code hashes are likewise not reversible by the administrator.

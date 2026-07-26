@@ -249,6 +249,9 @@ test("server-renders the Sleep Light Study setup page", async () => {
   assert.match(html, /Complete tonight/);
   assert.match(html, /Return after waking/);
   assert.match(html, /Study name \(real name or nickname\)/);
+  assert.match(html, /Create account/);
+  assert.match(html, /Choose a password/);
+  assert.doesNotMatch(html, /email reminder after waking|提醒邮箱/i);
   assert.match(html, /Bright red/);
   assert.match(html, /Dim red/);
   assert.match(html, /Bright blue/);
@@ -330,21 +333,25 @@ test("detects touch capability and preserves separate touch and keyboard control
   assert.match(page, /clearEndSequence\(\);[\s\S]*setPhase\("paused"\)/);
 });
 
-test("supports bilingual tutorials, unique study-name profiles, append-only feedback, and versioned history", async () => {
-  const [page, tutorial, feedback, remoteStorage, recordTypes, studyData, profileMigration] = await Promise.all([
+test("supports bilingual tutorials, password accounts, isolated practice, append-only feedback, and versioned history without participant reminder-email fields", async () => {
+  const [page, tutorial, practice, feedback, remoteStorage, recordTypes, studyData, profileMigration, passwordMigration] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/study-tutorial.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/attention-practice.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/session-feedback.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/remote-storage.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/session-record.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/study-data.ts", import.meta.url), "utf8"),
     readFile(new URL("../supabase/migrations/20260718_participant_profiles.sql", import.meta.url), "utf8"),
+    readFile(new URL("../supabase/migrations/20260723_password_accounts.sql", import.meta.url), "utf8"),
   ]);
 
   assert.match(page, /LANGUAGE_STORAGE_KEY/);
   assert.match(page, /changeLanguage\("zh"\)/);
   assert.match(page, /StudyTutorial/);
-  assert.match(page, /claimParticipantProfile/);
+  assert.match(page, /registerParticipantAccount/);
+  assert.match(page, /signInParticipantAccount/);
+  assert.match(page, /upgradeLegacyParticipantAccount/);
   assert.match(page, /fetchParticipantProgress/);
   assert.match(page, /participantRecoveryCodeInput/);
   assert.match(page, /STUDY_BUILD_VERSION/);
@@ -353,10 +360,17 @@ test("supports bilingual tutorials, unique study-name profiles, append-only feed
   assert.match(tutorial, /Keep these as similar as practical/);
   assert.match(tutorial, /温度/);
   assert.match(tutorial, /condition-progress-grid/);
+  assert.match(tutorial, /<strong>黑色十字<\/strong>/);
+  assert.match(tutorial, /The practice is not saved and does not count toward the study results/);
+  assert.match(practice, /Practice — not recorded/);
+  assert.match(practice, /background: "#202329"/);
+  assert.match(practice, /stage !== "prompt-end"/);
+  assert.doesNotMatch(practice, /localStorage|sessionStorage|fetch\(|Supabase|saveStudyDraft|registerResponse/);
   assert.match(feedback, /Questions or feedback/);
   assert.match(feedback, /有问题或反馈吗/);
   assert.match(remoteStorage, /submit_participant_feedback/);
   assert.match(remoteStorage, /submit_profile_study_session/);
+  assert.doesNotMatch(remoteStorage, /schedule_morning_reminder|cancel_morning_reminder|MorningReminderReceipt/);
   assert.match(recordTypes, /participantProfileId\?: string/);
   assert.match(recordTypes, /studyBuildVersion\?: string/);
   assert.match(studyData, /"participant_profile_id"/);
@@ -366,6 +380,60 @@ test("supports bilingual tutorials, unique study-name profiles, append-only feed
   assert.match(profileMigration, /participant_feedback_append_only/);
   assert.match(profileMigration, /saved\.condition_id = 'control'[\s\S]*saved\.payload ->> 'exposureStatus' = 'not-applicable'/);
   assert.match(profileMigration, /saved\.condition_id in \('bright-red', 'dim-red', 'bright-blue', 'dim-blue'\)[\s\S]*saved\.payload ->> 'exposureStatus' = 'completed'/);
+  assert.match(passwordMigration, /upgrade_participant_profile_credential/);
+  assert.match(page, /localStorage\.removeItem\(RETIRED_EMAIL_PLAN_KEY\)/);
+  assert.doesNotMatch(page, /scheduleReminderForRecord|Reminder email|提醒邮箱|REMINDER_CRON_SECRET/);
+});
+
+test("admin portal expands organized, safe, detailed session results", async () => {
+  const [page, details] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin-session-details.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /AdminSessionDetails/);
+  assert.match(page, /expandedSessionId/);
+  assert.match(page, /aria-expanded=\{isExpanded\}/);
+  assert.match(page, /aria-controls=\{detailsId\}/);
+  assert.match(page, /<AdminSessionDetails/);
+  assert.match(page, /profileById/);
+  assert.match(page, /v3\?\.participantProfileId/);
+  assert.match(page, /profileMatch/);
+  assert.match(
+    page,
+    /const STUDY_BUILD_VERSION = "2026-07-26-password-practice-admin-results-v1"/,
+  );
+
+  for (const section of [
+    "1. Record and profile",
+    "2. Condition and exposure",
+    "3. Timeline and durations",
+    "4. Pre-sleep questionnaire",
+    "5. After waking and reaction test",
+    "6. Device records",
+    "7. Attention-task results",
+    "8. Extra clicks, pauses, and display events",
+    "9. Automated consistency review",
+    "10. Feedback and questions",
+    "11. Raw validated session payload",
+  ]) {
+    assert.match(details, new RegExp(section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+
+  assert.match(details, /pageSize = 50/);
+  assert.match(details, /items\.slice\(start, start \+ pageSize\)/);
+  assert.match(details, /JSON\.stringify\(record, null, 2\)/);
+  assert.match(details, /aria-expanded=\{showRaw\}/);
+  assert.doesNotMatch(details, /dangerouslySetInnerHTML|\binnerHTML\b/);
+
+  assert.match(details, /profileMatch === "profile-id"/);
+  assert.match(details, /Exact profile ID/);
+  assert.match(details, /Historical normalized-name match/);
+  assert.match(details, /Schema v2 historical limits/);
+  assert.match(
+    details,
+    /did not collect the pre\/post questionnaires, overnight milestones, device history, reaction test, exposure status, participant profile ID, or website build version/,
+  );
 });
 
 test("immediate END still exports a complete terminated session row", () => {

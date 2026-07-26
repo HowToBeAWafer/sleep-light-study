@@ -2,9 +2,13 @@ import type { CsvSessionRecord } from "./study-data";
 import type { StudySessionRecordV3 } from "./session-record";
 import { isStudySessionDraftV3, isStudySessionRecordV3 } from "./session-validation.ts";
 import {
+  createParticipantPasswordProof,
   createRecoveryProof,
+  getParticipantCredentialProof,
   isParticipantProfile,
+  isValidParticipantPassword,
   isValidParticipantName,
+  isValidRecoveryCode,
   normalizeParticipantName,
   normalizeRecoveryCode,
   type LocalParticipantProfile,
@@ -13,7 +17,9 @@ import {
 
 export {
   forgetLocalParticipantProfile,
-  generateParticipantRecoveryCode,
+  createParticipantPasswordProof,
+  getParticipantCredentialProof,
+  isValidParticipantPassword,
   isValidParticipantName,
   isValidRecoveryCode,
   loadLocalParticipantProfile,
@@ -372,14 +378,15 @@ function isProfileClaimResponse(value: unknown): value is ParticipantProfile & {
   return isParticipantProfile(value) && typeof (value as Record<string, unknown>).created === "boolean";
 }
 
-function profileRpcBody(profile: Pick<LocalParticipantProfile, "profileId" | "recoveryCode">) {
+async function profileRpcBody(profile: LocalParticipantProfile) {
   if (!UUID_PATTERN.test(profile.profileId)) {
     throw new Error("The participant profile is not valid.");
   }
-  return createRecoveryProof(profile.recoveryCode).then((recoveryProof) => ({
+  const recoveryProof = await getParticipantCredentialProof(profile);
+  return {
     participant_profile_id: profile.profileId,
     recovery_proof: recoveryProof,
-  }));
+  };
 }
 
 async function postAnonymousRpc(functionName: string, body: Record<string, unknown>, fallback: string) {
@@ -421,6 +428,88 @@ export async function claimParticipantProfile(
   return { ...value, recoveryCode: normalizedCode };
 }
 
+/** Creates a new unique-name account with a password-derived bearer proof. */
+export async function registerParticipantAccount(
+  displayName: string,
+  password: string,
+): Promise<LocalParticipantProfile> {
+  const canonicalName = normalizeParticipantName(displayName);
+  if (!isValidParticipantName(canonicalName) || !isValidParticipantPassword(password)) {
+    throw new Error("The study name or password is not valid.");
+  }
+  const credentialProof = await createParticipantPasswordProof(canonicalName, password);
+  const response = await postAnonymousRpc(
+    "claim_participant_profile",
+    { participant_name: canonicalName, recovery_proof: credentialProof },
+    "The participant account could not be created.",
+  );
+  const value: unknown = await response.json();
+  if (!isProfileClaimResponse(value)) {
+    throw new Error("The participant account response was not valid.");
+  }
+  if (!value.created) {
+    throw new Error("This study name already has an account. Choose Sign in instead.");
+  }
+  return { ...value, credentialProof };
+}
+
+/** Signs into an existing unique-name account without creating a new profile. */
+export async function signInParticipantAccount(
+  displayName: string,
+  password: string,
+): Promise<LocalParticipantProfile> {
+  const canonicalName = normalizeParticipantName(displayName);
+  if (!isValidParticipantName(canonicalName) || !isValidParticipantPassword(password)) {
+    throw new Error("The study name or password is not valid.");
+  }
+  const credentialProof = await createParticipantPasswordProof(canonicalName, password);
+  const response = await postAnonymousRpc(
+    "reclaim_participant_profile",
+    { participant_name: canonicalName, recovery_proof: credentialProof },
+    "The participant account could not be opened.",
+  );
+  const value: unknown = await response.json();
+  if (!isParticipantProfile(value)) {
+    throw new Error("The participant account response was not valid.");
+  }
+  return { ...value, credentialProof };
+}
+
+/** Replaces an older recovery-code credential with a password-derived proof. */
+export async function upgradeLegacyParticipantAccount(
+  displayName: string,
+  recoveryCode: string,
+  password: string,
+): Promise<LocalParticipantProfile> {
+  const canonicalName = normalizeParticipantName(displayName);
+  const normalizedCode = normalizeRecoveryCode(recoveryCode);
+  if (
+    !isValidParticipantName(canonicalName)
+    || !isValidParticipantPassword(password)
+    || !isValidRecoveryCode(normalizedCode)
+  ) {
+    throw new Error("The study name, recovery code, or new password is not valid.");
+  }
+  const [currentRecoveryProof, credentialProof] = await Promise.all([
+    createRecoveryProof(normalizedCode),
+    createParticipantPasswordProof(canonicalName, password),
+  ]);
+  const response = await postAnonymousRpc(
+    "upgrade_participant_profile_credential",
+    {
+      participant_name: canonicalName,
+      current_recovery_proof: currentRecoveryProof,
+      new_credential_proof: credentialProof,
+    },
+    "The older participant account could not be upgraded.",
+  );
+  const value: unknown = await response.json();
+  if (!isParticipantProfile(value)) {
+    throw new Error("The upgraded participant account response was not valid.");
+  }
+  return { ...value, credentialProof };
+}
+
 /** Reopens an existing study name without creating a new one. */
 export async function reclaimParticipantProfile(
   displayName: string,
@@ -445,7 +534,7 @@ export async function reclaimParticipantProfile(
 }
 
 export async function fetchParticipantProgress(
-  profile: Pick<LocalParticipantProfile, "profileId" | "recoveryCode">,
+  profile: LocalParticipantProfile,
 ): Promise<ParticipantProgress> {
   const authentication = await profileRpcBody(profile);
   const response = await postAnonymousRpc(
@@ -479,7 +568,7 @@ export async function fetchParticipantProgress(
 }
 
 export async function uploadProfileStudySession(
-  profile: Pick<LocalParticipantProfile, "profileId" | "displayName" | "recoveryCode">,
+  profile: LocalParticipantProfile,
   record: StudySessionRecordV3,
   options: { keepalive?: boolean } = {},
 ) {
@@ -509,7 +598,7 @@ export async function uploadProfileStudySession(
 }
 
 export async function submitParticipantFeedback(
-  profile: Pick<LocalParticipantProfile, "profileId" | "recoveryCode">,
+  profile: LocalParticipantProfile,
   input: {
     sessionId: string;
     messageType: ParticipantFeedbackType;
