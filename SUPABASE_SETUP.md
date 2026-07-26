@@ -6,14 +6,14 @@ The public website contains only the Supabase publishable key. Final-session rea
 
 ## 2026-07-23 password-account production migration and release
 
-> **Production migration status — owner-confirmed 2026-07-26:** the project owner reports that the complete `20260723_password_accounts.sql` ran successfully in the production project and SQL Editor displayed `Success. No rows returned`. The migration step is therefore no longer pending. The matching `2026-07-26-password-practice-admin-results-v1` website deployment and the release end-to-end check remain separate pending steps. The morning-email prototype was cancelled before production and is not part of this release.
+> **Production release status — partially verified 2026-07-26:** the project owner reports that the complete `20260723_password_accounts.sql` ran successfully in production and SQL Editor displayed `Success. No rows returned`. The matching `2026-07-26-password-practice-admin-results-v1` build was deployed by GitHub Pages workflow #42, and its public password-account entry and release assets were checked. The full overnight flow and authenticated administrator review against real records remain project-owner end-to-end checks. The morning-email prototype was cancelled before production and is not part of this release.
 
 The production project already has both 2026-07-18 migrations and the owner-confirmed password migration. Complete the remaining release checks in this order:
 
 1. Record an appropriate backup and confirm the 2026-07-18 profile verification queries still pass.
 2. Run the password-account verification query below against production. Do not rerun or replace participant history merely to obtain a second success message.
-3. Deploy the matching `2026-07-26-password-practice-admin-results-v1` website build.
-4. Complete the password-account, administrator, bilingual, practice, overnight-resume, final-save, cross-browser sign-in, in-page detailed-result review, and CSV/JSON download tests.
+3. Confirm GitHub Pages still serves the deployed `2026-07-26-password-practice-admin-results-v1` build from workflow #42.
+4. Complete the password-account, administrator, bilingual, practice, overnight-resume, final-save, cross-browser sign-in, in-page detailed-result review, and CSV/JSON download tests with the project owner's credentials and designated test data.
 
 ### Participant-password model
 
