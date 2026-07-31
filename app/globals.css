@@ -815,6 +815,7 @@ tbody tr:last-child td { border-bottom: 0; }
 }
 .survey-question input[type="time"],
 .survey-question input[type="number"],
+.survey-question textarea,
 .survey-question select {
   width: 100%;
   min-height: 52px;
@@ -828,7 +829,14 @@ tbody tr:last-child td { border-bottom: 0; }
   font-size: 16px;
 }
 .survey-question select { cursor: pointer; }
+.survey-question textarea {
+  min-height: 110px;
+  padding-block: 12px;
+  resize: vertical;
+  line-height: 1.5;
+}
 .survey-question input:focus,
+.survey-question textarea:focus,
 .survey-question select:focus {
   border-color: #778393;
   outline: none;
@@ -1308,7 +1316,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .condition-progress-grid {
   margin-top: 20px;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 9px;
 }
 .condition-progress-grid > div {
@@ -1327,6 +1335,26 @@ tbody tr:last-child td { border-bottom: 0; }
 .condition-progress-grid strong { color: #dfe4ea; font-size: 12px; line-height: 1.35; }
 .condition-progress-grid small { margin-top: auto; color: #6f7b89; font-size: 10px; }
 .tutorial-privacy-note { margin: 25px 0 0; color: #778393; font-size: 12px; line-height: 1.6; }
+.tutorial-safety-confirmation {
+  margin-top: 26px;
+  padding: 17px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 12px;
+  border: 1px solid #7a4a32;
+  border-radius: 14px;
+  background: #21150f;
+  color: #e6c3ab;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.tutorial-safety-confirmation input {
+  width: 19px;
+  height: 19px;
+  margin-top: 1px;
+  accent-color: #d77442;
+}
 .tutorial-continue { width: 100%; margin-top: 20px; }
 .practice-shell {
   min-height: 100vh;
