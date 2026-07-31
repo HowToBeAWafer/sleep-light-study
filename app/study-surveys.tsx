@@ -21,6 +21,13 @@ import {
   type SleepTemperature,
   type YesNoPreferNotToAnswer,
 } from "./protocol-v3";
+import {
+  MORNING_QUESTIONNAIRE_VERSION,
+  POST_EXPOSURE_QUESTIONNAIRE_VERSION,
+  isMorningStudySurvey,
+  type MorningStudySurvey,
+  type PostExposureSurvey,
+} from "./protocol-v4";
 
 const KSS_LABELS_ZH: Record<KssScore, string> = {
   1: "极度清醒",
@@ -85,24 +92,57 @@ const PRE_SURVEY_COPY = {
   },
 } as const;
 
-const POST_SURVEY_COPY = {
+const POST_EXPOSURE_COPY = {
   en: {
-    eyebrow: "After waking",
+    eyebrow: "Immediately after the display",
     title: "How sleepy are you now?",
-    introduction: "Answer before reading the reaction-test instructions.",
-    deviceQuestion: "What type of device are you using now?",
-    detectedDevice: "Automatically detected: {device}. Correct it if needed.",
+    introduction: "Answer now, before putting the device away or starting another activity.",
     sleepiness: "How sleepy have you felt during the immediately preceding five minutes?",
-    continue: "Continue to reaction test",
+    continue: "Save and continue to sleep instructions",
   },
   zh: {
-    eyebrow: "睡醒后",
+    eyebrow: "画面结束后立即填写",
     title: "你现在有多困？",
-    introduction: "请先作答，再阅读反应力测试说明。",
+    introduction: "请现在作答；在填写前不要放下设备或开始其他活动。",
+    sleepiness: "在刚刚过去的五分钟内，你感觉有多困？",
+    continue: "保存并继续查看睡眠说明",
+  },
+} as const;
+
+const MORNING_SURVEY_COPY = {
+  en: {
+    eyebrow: "Next-morning questionnaire",
+    title: "Tell us about last night's sleep.",
+    introduction: "Complete this questionnaire after your normal sleep. There is no separate reaction-time test.",
+    deviceQuestion: "What type of device are you using now?",
+    detectedDevice: "Automatically detected: {device}. Correct it if needed.",
+    attemptedSleepTime: "What time did you try to fall asleep?",
+    wakeTime: "What time did you wake for the day?",
+    awakenings: "How many times do you remember waking during the night?",
+    sleepQuality: "How would you rate last night's sleep quality?",
+    restedness: "How rested or refreshed did you feel when you woke?",
+    alertness: "How alert do you feel now?",
+    unusualFactors: "Was anything unusual that may have affected your sleep?",
+    unusualFactorsNote: "Briefly describe what was unusual. Do not include identifying or medical details.",
+    continue: "Finish this session",
+    incomplete: "Please answer every required question before continuing.",
+  },
+  zh: {
+    eyebrow: "第二天早晨问卷",
+    title: "请告诉我们昨晚的睡眠情况。",
+    introduction: "请在按照平常方式睡醒后填写。本研究不再设置独立的反应时间测试。",
     deviceQuestion: "你现在使用的是哪一类设备？",
     detectedDevice: "系统自动识别为：{device}。如果不正确，请修改。",
-    sleepiness: "在刚刚过去的五分钟内，你感觉有多困？",
-    continue: "继续进行反应力测试",
+    attemptedSleepTime: "你昨晚大约几点开始尝试入睡？",
+    wakeTime: "你今天大约几点起床？",
+    awakenings: "你记得夜间醒来了几次？",
+    sleepQuality: "你如何评价昨晚的睡眠质量？",
+    restedness: "醒来时，你感觉休息得有多充分或精神恢复得如何？",
+    alertness: "你现在感觉有多清醒？",
+    unusualFactors: "昨晚是否有可能影响睡眠的异常情况？",
+    unusualFactorsNote: "请简要说明异常情况，不要填写可识别身份或具体医疗信息。",
+    continue: "完成本次实验",
+    incomplete: "请回答所有必答问题后再继续。",
   },
 } as const;
 
@@ -141,8 +181,8 @@ function KssField({
       <legend>{legend}</legend>
       <p className="question-help">
         {language === "zh"
-          ? "卡罗林斯卡困倦量表（KSS），标准1–9分完整文字标注版。"
-          : "Karolinska Sleepiness Scale (KSS), standard 1–9 fully labelled version."}
+          ? "卡罗林斯卡困倦量表，标准 1–9 分完整文字标注版。"
+          : "Karolinska Sleepiness Scale, standard 1–9 fully labelled version."}
       </p>
       <div className="kss-options">
         {KSS_OPTIONS.map((option) => (
@@ -481,6 +521,180 @@ export function PreStudySurveyForm({
   );
 }
 
+export function PostExposureSurveyForm({
+  language = "en",
+  saveError = "",
+  onSubmit,
+}: {
+  language?: Language;
+  saveError?: string;
+  onSubmit: (survey: PostExposureSurvey) => void;
+}) {
+  const [sleepinessKss, setSleepinessKss] = useState<KssScore | null>(null);
+  const copy = POST_EXPOSURE_COPY[language];
+  return (
+    <main className="survey-shell post-survey-shell">
+      <form
+        className="survey-card post-survey-card"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (sleepinessKss === null) return;
+          onSubmit(
+            {
+              questionnaireVersion: POST_EXPOSURE_QUESTIONNAIRE_VERSION,
+              answeredAtIso: new Date().toISOString(),
+              sleepinessKss,
+            },
+          );
+        }}
+      >
+        <header className="survey-header">
+          <p className="eyebrow">{copy.eyebrow}</p>
+          <h1>{copy.title}</h1>
+          <p>{copy.introduction}</p>
+        </header>
+        <KssField
+          value={sleepinessKss}
+          onChange={setSleepinessKss}
+          legend={copy.sleepiness}
+          language={language}
+        />
+        {saveError ? <p className="form-error" role="alert">{saveError}</p> : null}
+        <button className="primary-button survey-submit" type="submit" disabled={sleepinessKss === null}>
+          {copy.continue}
+        </button>
+      </form>
+    </main>
+  );
+}
+
+export function MorningSurveyForm({
+  detectedDevice,
+  language = "en",
+  saveError = "",
+  onSubmit,
+}: {
+  detectedDevice: DeviceInfo;
+  language?: Language;
+  saveError?: string;
+  onSubmit: (survey: MorningStudySurvey, deviceInfo: DeviceInfo) => void;
+}) {
+  const copy = MORNING_SURVEY_COPY[language];
+  const [deviceCategory, setDeviceCategory] = useState<DeviceCategory>(detectedDevice.confirmedCategory);
+  const [attemptedSleepTime, setAttemptedSleepTime] = useState("");
+  const [wakeTime, setWakeTime] = useState("");
+  const [awakenings, setAwakenings] = useState<number | null>(null);
+  const [sleepQuality, setSleepQuality] = useState<FivePointScore | null>(null);
+  const [restedness, setRestedness] = useState<FivePointScore | null>(null);
+  const [alertness, setAlertness] = useState<FivePointScore | null>(null);
+  const [unusualFactors, setUnusualFactors] = useState<YesNoPreferNotToAnswer | null>(null);
+  const [unusualFactorsNote, setUnusualFactorsNote] = useState("");
+  const [error, setError] = useState("");
+  const fivePointOptions = (labels: [string, string, string, string, string]) =>
+    labels.map((label, index) => ({ value: String(index + 1), label: `${index + 1} — ${label}` }));
+
+  return (
+    <main className="survey-shell post-survey-shell">
+      <form
+        className="survey-card"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const completed: MorningStudySurvey = {
+            questionnaireVersion: MORNING_QUESTIONNAIRE_VERSION,
+            answeredAtIso: new Date().toISOString(),
+            attemptedSleepTime,
+            wakeTime,
+            awakenings: awakenings ?? -1,
+            sleepQuality: sleepQuality as FivePointScore,
+            restedness: restedness as FivePointScore,
+            alertness: alertness as FivePointScore,
+            unusualFactors: unusualFactors as YesNoPreferNotToAnswer,
+            unusualFactorsNote: unusualFactors === "yes" ? unusualFactorsNote.trim() : null,
+          };
+          if (!isMorningStudySurvey(completed)) {
+            setError(copy.incomplete);
+            return;
+          }
+          setError("");
+          onSubmit(completed, confirmDeviceCategory(detectedDevice, deviceCategory));
+        }}
+      >
+        <header className="survey-header">
+          <p className="eyebrow">{copy.eyebrow}</p>
+          <h1>{copy.title}</h1>
+          <p>{copy.introduction}</p>
+        </header>
+
+        <SelectQuestion
+          id="morning-device-category"
+          label={copy.deviceQuestion}
+          help={copy.detectedDevice.replace("{device}", deviceLabel(detectedDevice.detectedCategory, language))}
+          value={deviceCategory}
+          onChange={(value) => setDeviceCategory(value as DeviceCategory)}
+          options={deviceOptions(language)}
+          language={language}
+        />
+        <label className="survey-question" htmlFor="attempted-sleep-time">
+          <span>{copy.attemptedSleepTime}</span>
+          <input id="attempted-sleep-time" type="time" value={attemptedSleepTime} onChange={(event) => setAttemptedSleepTime(event.target.value)} required />
+        </label>
+        <label className="survey-question" htmlFor="wake-time">
+          <span>{copy.wakeTime}</span>
+          <input id="wake-time" type="time" value={wakeTime} onChange={(event) => setWakeTime(event.target.value)} required />
+        </label>
+        <label className="survey-question" htmlFor="night-awakenings">
+          <span>{copy.awakenings}</span>
+          <input id="night-awakenings" type="number" min="0" max="20" step="1" value={awakenings ?? ""} onChange={(event) => setAwakenings(event.target.value === "" ? null : Number(event.target.value))} required />
+        </label>
+        <SelectQuestion
+          id="morning-sleep-quality"
+          label={copy.sleepQuality}
+          value={sleepQuality}
+          onChange={(value) => setSleepQuality(Number(value) as FivePointScore)}
+          options={fivePointOptions(language === "zh" ? ["非常差", "差", "一般", "好", "非常好"] : ["Very poor", "Poor", "Fair", "Good", "Very good"])}
+          language={language}
+        />
+        <SelectQuestion
+          id="morning-restedness"
+          label={copy.restedness}
+          value={restedness}
+          onChange={(value) => setRestedness(Number(value) as FivePointScore)}
+          options={fivePointOptions(language === "zh" ? ["完全没有休息好", "稍微休息了一些", "一般", "休息得很好", "休息得非常充分"] : ["Not at all rested", "Slightly rested", "Moderately rested", "Well rested", "Very well rested"])}
+          language={language}
+        />
+        <SelectQuestion
+          id="morning-alertness"
+          label={copy.alertness}
+          value={alertness}
+          onChange={(value) => setAlertness(Number(value) as FivePointScore)}
+          options={fivePointOptions(language === "zh" ? ["非常不清醒", "不太清醒", "一般", "比较清醒", "非常清醒"] : ["Very unalert", "Slightly unalert", "Moderately alert", "Alert", "Very alert"])}
+          language={language}
+        />
+        <SelectQuestion
+          id="morning-unusual-factors"
+          label={copy.unusualFactors}
+          value={unusualFactors}
+          onChange={(value) => {
+            setUnusualFactors(value as YesNoPreferNotToAnswer);
+            if (value !== "yes") setUnusualFactorsNote("");
+          }}
+          options={yesNoPreferOptions(language)}
+          language={language}
+        />
+        {unusualFactors === "yes" ? (
+          <label className="survey-question nested-question" htmlFor="morning-unusual-note">
+            <span>{copy.unusualFactorsNote}</span>
+            <textarea id="morning-unusual-note" value={unusualFactorsNote} onChange={(event) => setUnusualFactorsNote(event.target.value)} maxLength={1000} required />
+          </label>
+        ) : null}
+        {error || saveError ? <p className="form-error" role="alert">{error || saveError}</p> : null}
+        <button className="primary-button survey-submit" type="submit">{copy.continue}</button>
+      </form>
+    </main>
+  );
+}
+
+/** Compatibility screen for an unexpired Protocol v3 draft started before v4 launched. */
 export function PostStudySurveyForm({
   detectedDevice,
   language = "en",
@@ -494,7 +708,6 @@ export function PostStudySurveyForm({
 }) {
   const [sleepinessKss, setSleepinessKss] = useState<KssScore | null>(null);
   const [deviceCategory, setDeviceCategory] = useState<DeviceCategory>(detectedDevice.confirmedCategory);
-  const copy = POST_SURVEY_COPY[language];
   return (
     <main className="survey-shell post-survey-shell">
       <form
@@ -513,14 +726,14 @@ export function PostStudySurveyForm({
         }}
       >
         <header className="survey-header">
-          <p className="eyebrow">{copy.eyebrow}</p>
-          <h1>{copy.title}</h1>
-          <p>{copy.introduction}</p>
+          <p className="eyebrow">{language === "zh" ? "旧版 v3 睡醒后步骤" : "Legacy v3 after-waking step"}</p>
+          <h1>{language === "zh" ? "你现在有多困？" : "How sleepy are you now?"}</h1>
+          <p>{language === "zh" ? "这是部署前已开始的旧版实验恢复流程。" : "This restores a Protocol v3 session started before the update."}</p>
         </header>
         <SelectQuestion
-          id="post-device-category"
-          label={copy.deviceQuestion}
-          help={copy.detectedDevice.replace("{device}", deviceLabel(detectedDevice.detectedCategory, language))}
+          id="legacy-post-device-category"
+          label={language === "zh" ? "你现在使用哪一类设备？" : "What type of device are you using now?"}
+          help={(language === "zh" ? "系统识别为：{device}。" : "Automatically detected: {device}.").replace("{device}", deviceLabel(detectedDevice.detectedCategory, language))}
           value={deviceCategory}
           onChange={(value) => setDeviceCategory(value as DeviceCategory)}
           options={deviceOptions(language)}
@@ -529,12 +742,12 @@ export function PostStudySurveyForm({
         <KssField
           value={sleepinessKss}
           onChange={setSleepinessKss}
-          legend={copy.sleepiness}
+          legend={language === "zh" ? "在刚刚过去的五分钟内，你感觉有多困？" : "How sleepy have you felt during the immediately preceding five minutes?"}
           language={language}
         />
         {saveError ? <p className="form-error" role="alert">{saveError}</p> : null}
         <button className="primary-button survey-submit" type="submit" disabled={sleepinessKss === null}>
-          {copy.continue}
+          {language === "zh" ? "继续旧版反应步骤" : "Continue the legacy reaction step"}
         </button>
       </form>
     </main>
