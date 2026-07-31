@@ -4,6 +4,7 @@ import type {
   PreStudySurvey,
   ReactionTestRecord,
 } from "./protocol-v3";
+import type { MorningStudySurvey, PostExposureSurvey } from "./protocol-v4";
 
 type CsvAttentionTrial = {
   trialNumber: number;
@@ -28,8 +29,10 @@ type CsvSessionDeviceInfo = {
 };
 
 export type CsvSessionRecord = {
-  schemaVersion?: 2 | 3;
+  schemaVersion?: 2 | 3 | 4;
   protocolVersion?: string;
+  sequenceVersion?: string;
+  sequencePosition?: number;
   attentionProtocolVersion?: string;
   sessionId: string;
   participantId: string;
@@ -60,6 +63,8 @@ export type CsvSessionRecord = {
   deviceInfo?: CsvSessionDeviceInfo;
   preSurvey?: PreStudySurvey;
   postSurvey?: PostStudySurvey | null;
+  postExposureSurvey?: PostExposureSurvey | null;
+  morningSurvey?: MorningStudySurvey | null;
   reactionTest?: ReactionTestRecord | null;
   trials: CsvAttentionTrial[];
   falseClicks: Array<{
@@ -184,6 +189,25 @@ const CSV_HEADERS = [
   "reaction_trial_input_method",
   "participant_profile_id",
   "study_build_version",
+  "sequence_version",
+  "sequence_position",
+  "post_exposure_questionnaire_version",
+  "post_exposure_answered_at_iso",
+  "post_exposure_sleepiness_kss",
+  "morning_questionnaire_version",
+  "morning_answered_at_iso",
+  "morning_attempted_sleep_time",
+  "morning_wake_time",
+  "morning_awakenings",
+  "morning_sleep_quality",
+  "morning_restedness_current_night",
+  "morning_alertness",
+  "morning_unusual_factors",
+  "morning_unusual_factors_note",
+  "reaction_source",
+  "exposure_reaction_valid_count",
+  "exposure_reaction_mean_ms",
+  "exposure_reaction_median_ms",
 ] as const;
 
 type CsvHeader = (typeof CSV_HEADERS)[number];
@@ -222,13 +246,33 @@ function elapsedFromSessionStart(session: CsvSessionRecord, eventAtIso: string) 
 function commonColumns(session: CsvSessionRecord): CsvRow {
   const preSurvey = session.preSurvey;
   const postSurvey = session.postSurvey;
+  const postExposureSurvey = session.postExposureSurvey;
+  const morningSurvey = session.morningSurvey;
   const reactionTest = session.reactionTest;
   const beforeSleep = session.deviceInfo?.beforeSleep;
   const afterWaking = session.deviceInfo?.afterWaking;
+  const exposureReactionTimes = session.trials
+    .filter((trial) => trial.status === "hit" && trial.reactionTimeMs !== null)
+    .map((trial) => trial.reactionTimeMs as number)
+    .sort((left, right) => left - right);
+  const exposureReactionMean = exposureReactionTimes.length
+    ? exposureReactionTimes.reduce((total, value) => total + value, 0) /
+      exposureReactionTimes.length
+    : null;
+  const exposureReactionMedian = exposureReactionTimes.length
+    ? exposureReactionTimes.length % 2
+      ? exposureReactionTimes[Math.floor(exposureReactionTimes.length / 2)]
+      : (
+          exposureReactionTimes[exposureReactionTimes.length / 2 - 1] +
+          exposureReactionTimes[exposureReactionTimes.length / 2]
+        ) / 2
+    : null;
 
   return {
     schema_version: session.schemaVersion ?? null,
     protocol_version: session.protocolVersion ?? null,
+    sequence_version: session.sequenceVersion ?? null,
+    sequence_position: session.sequencePosition ?? null,
     attention_protocol_version: session.attentionProtocolVersion ?? null,
     session_id: session.sessionId,
     participant_id: session.participantId,
@@ -280,6 +324,28 @@ function commonColumns(session: CsvSessionRecord): CsvRow {
     post_questionnaire_version: postSurvey?.questionnaireVersion ?? null,
     post_answered_at_iso: postSurvey?.answeredAtIso ?? null,
     post_sleepiness_kss: postSurvey?.sleepinessKss ?? null,
+    post_exposure_questionnaire_version: postExposureSurvey?.questionnaireVersion ?? null,
+    post_exposure_answered_at_iso: postExposureSurvey?.answeredAtIso ?? null,
+    post_exposure_sleepiness_kss: postExposureSurvey?.sleepinessKss ?? null,
+    morning_questionnaire_version: morningSurvey?.questionnaireVersion ?? null,
+    morning_answered_at_iso: morningSurvey?.answeredAtIso ?? null,
+    morning_attempted_sleep_time: morningSurvey?.attemptedSleepTime ?? null,
+    morning_wake_time: morningSurvey?.wakeTime ?? null,
+    morning_awakenings: morningSurvey?.awakenings ?? null,
+    morning_sleep_quality: morningSurvey?.sleepQuality ?? null,
+    morning_restedness_current_night: morningSurvey?.restedness ?? null,
+    morning_alertness: morningSurvey?.alertness ?? null,
+    morning_unusual_factors: morningSurvey?.unusualFactors ?? null,
+    morning_unusual_factors_note: morningSurvey?.unusualFactorsNote ?? null,
+    reaction_source:
+      session.schemaVersion === 4
+        ? "exposure_attention_trials"
+        : session.schemaVersion === 3
+          ? "standalone_reaction_test"
+          : "legacy_exposure_attention_trials",
+    exposure_reaction_valid_count: exposureReactionTimes.length,
+    exposure_reaction_mean_ms: exposureReactionMean,
+    exposure_reaction_median_ms: exposureReactionMedian,
     reaction_test_protocol_version: reactionTest?.protocolVersion ?? null,
     reaction_test_started_at_iso: reactionTest?.startedAtIso ?? null,
     reaction_test_completed_at_iso: reactionTest?.completedAtIso ?? null,
