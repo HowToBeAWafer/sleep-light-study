@@ -43,8 +43,15 @@ const html = (await response.text())
   .replaceAll(socialImageRoot, socialImagePages)
   .replaceAll("/assets/", "./assets/");
 
-if (!html.includes("Read tutorial and begin") || !html.includes("Control — normal sleep")) {
+if (
+  !html.includes("Read tutorial and begin") ||
+  !html.includes("A study of how short pre-sleep screen-color exposure relates to immediate and next-morning alertness.") ||
+  !html.includes("Assigned automatically after sign-in")
+) {
   throw new Error("Static render is missing the participant start control.");
+}
+if (html.includes("Control — normal sleep")) {
+  throw new Error("Static render exposes a historical condition that is not part of Protocol v4.");
 }
 if (html.toLowerCase().includes("or test")) {
   throw new Error("Static render publicly reveals the hidden test participant hint.");
@@ -65,11 +72,16 @@ if (
   !javascript.includes("Tap again to end") ||
   !javascript.includes("Karolinska Sleepiness Scale") ||
   !javascript.includes("I have woken up") ||
-  !javascript.includes("Three valid responses are next") ||
-  !javascript.includes("Keep these as similar as practical") ||
+  !javascript.includes("Immediately after the display") ||
+  !javascript.includes("Next-morning questionnaire") ||
+  !javascript.includes("Fixed order: dim red") ||
+  !javascript.includes("Do not participate if you have a history of photosensitive seizures") ||
+  !javascript.includes("Time watched") ||
   !javascript.includes("Your name must be unique") ||
   !javascript.includes("Questions or feedback") ||
-  !javascript.includes("submit_profile_study_session")
+  !javascript.includes("submit_profile_study_session") ||
+  !javascript.includes("save_participant_study_draft") ||
+  !javascript.includes("load_participant_study_draft")
 ) {
   throw new Error("Static client bundle is missing a required study control or storage integration.");
 }
