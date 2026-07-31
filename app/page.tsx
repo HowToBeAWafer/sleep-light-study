@@ -11,10 +11,18 @@ import {
   type ReactionTestRecord,
   detectBrowserDeviceInfo,
 } from "./protocol-v3";
+import {
+  V4_CONDITION_ORDER,
+  sequencePositionForCondition,
+  type MorningStudySurvey,
+  type PostExposureSurvey,
+  type V4ConditionId,
+} from "./protocol-v4";
 import { clearReactionTestProgress, ReactionTest } from "./reaction-test";
 import {
   ADMIN_EMAIL,
   deleteStudyDraft,
+  deleteParticipantStudyDraft,
   fetchAdminParticipantFeedback,
   fetchAdminParticipantProfiles,
   fetchParticipantProgress,
@@ -28,11 +36,13 @@ import {
   loadLocalParticipantProfile,
   loadLocalParticipantProfiles,
   loadStudyDraft,
+  loadParticipantStudyDraft,
   normalizeParticipantName,
   normalizeRecoveryCode,
   rememberLocalParticipantProfile,
   registerParticipantAccount,
   saveStudyDraft,
+  saveParticipantStudyDraft,
   signInParticipantAccount,
   signInAdmin,
   submitParticipantFeedback,
@@ -55,11 +65,19 @@ import type {
   PauseRecord,
   PlannedTrial,
   StudySessionRecordV3,
+  StudySessionRecordV4,
+  StudySessionRecord,
   TrialRecord,
 } from "./session-record";
 import { isStudySessionDraftV3, isStudySessionRecordV3 } from "./session-validation";
+import { isStudySessionDraftV4, isStudySessionRecordV4 } from "./session-validation-v4";
 import { sessionToCsv, sessionsToCsv } from "./study-data";
-import { PostStudySurveyForm, PreStudySurveyForm } from "./study-surveys";
+import {
+  MorningSurveyForm,
+  PostExposureSurveyForm,
+  PostStudySurveyForm,
+  PreStudySurveyForm,
+} from "./study-surveys";
 import { StudyTutorial } from "./study-tutorial";
 import { SessionFeedback, type SessionFeedbackPayload } from "./session-feedback";
 import { AttentionPractice } from "./attention-practice";
@@ -80,8 +98,10 @@ type Phase =
   | "countdown"
   | "running"
   | "paused"
+  | "post-exposure-survey"
   | "sleep-ready"
   | "awaiting-morning"
+  | "morning-survey"
   | "post-survey"
   | "reaction-test"
   | "results";
@@ -105,25 +125,11 @@ type Condition = {
 
 const CONDITIONS: Condition[] = [
   {
-    id: "bright-red",
-    name: "Bright Red",
-    luminance: "High digital intensity",
-    color: "#ff0000",
-    rgb: "255, 0, 0",
-  },
-  {
     id: "dim-red",
     name: "Dim Red",
     luminance: "Low digital intensity",
     color: "#660000",
     rgb: "102, 0, 0",
-  },
-  {
-    id: "bright-blue",
-    name: "Bright Blue",
-    luminance: "High digital intensity",
-    color: "#0000ff",
-    rgb: "0, 0, 255",
   },
   {
     id: "dim-blue",
@@ -133,6 +139,20 @@ const CONDITIONS: Condition[] = [
     rgb: "0, 0, 102",
   },
   {
+    id: "bright-blue",
+    name: "Bright Blue",
+    luminance: "High digital intensity",
+    color: "#0000ff",
+    rgb: "0, 0, 255",
+  },
+  {
+    id: "bright-red",
+    name: "Bright Red",
+    luminance: "High digital intensity",
+    color: "#ff0000",
+    rgb: "255, 0, 0",
+  },
+  {
     id: "control",
     name: "Control — Normal Sleep",
     luminance: "No light exposure",
@@ -140,6 +160,11 @@ const CONDITIONS: Condition[] = [
     rgb: null,
   },
 ];
+
+const ACTIVE_CONDITIONS = CONDITIONS.filter(
+  (condition): condition is Condition & { id: V4ConditionId } =>
+    (V4_CONDITION_ORDER as readonly string[]).includes(condition.id),
+);
 
 const CONDITION_MAP = Object.fromEntries(
   CONDITIONS.map((condition) => [condition.id, condition]),
@@ -151,9 +176,9 @@ const FINAL_STORAGE_KEY = "sleep-light-study:sessions:v2";
 const OVERNIGHT_DRAFT_KEY = "sleep-light-study:overnight-draft:v1";
 const RETIRED_EMAIL_PLAN_KEY = "sleep-light-study:morning-reminder-plan:v1";
 const LANGUAGE_STORAGE_KEY = "sleep-light-study:language:v1";
-const STUDY_BUILD_VERSION = "2026-07-26-password-practice-admin-results-v1";
+const STUDY_BUILD_VERSION = "2026-07-31-fixed-four-immediate-alertness-v1";
 const DRAFT_MAX_AGE_MS = 48 * 60 * 60 * 1000;
-const MINIMUM_SLEEP_INTERVAL_MS = 4 * 60 * 60 * 1000;
+const TEST_PROFILE_ID = "00000000-0000-4000-8000-000000000001";
 
 function isTestParticipantId(value: string) {
   return value.trim().toLowerCase() === "test";
@@ -279,22 +304,23 @@ function removeStoredSession(sessionId: string) {
   }
 }
 
-function getDraftAgeAnchor(record: StudySessionRecordV3) {
+function getDraftAgeAnchor(record: StudySessionRecord) {
   return Date.parse(record.sleepStartedAtIso ?? record.stimulusEndedAtIso ?? record.startedAtIso);
 }
 
-function isFreshDraft(record: StudySessionRecordV3) {
+function isFreshDraft(record: StudySessionRecord) {
   const anchor = getDraftAgeAnchor(record);
   return Number.isFinite(anchor) && Date.now() - anchor <= DRAFT_MAX_AGE_MS;
 }
 
-function getRecordProgressTime(record: StudySessionRecordV3) {
+function getRecordProgressTime(record: StudySessionRecord) {
   const checkpointAt = record.exposureStatus === "in-progress" && record.stimulusStartedAtIso
     ? Date.parse(record.stimulusStartedAtIso) + record.wallClockDurationMs
     : Number.NaN;
   const candidates = [
-    record.reactionTest?.completedAtIso,
-    record.postSurvey?.answeredAtIso,
+    ...(record.schemaVersion === 3
+      ? [record.reactionTest?.completedAtIso, record.postSurvey?.answeredAtIso]
+      : [record.morningSurvey?.answeredAtIso, record.postExposureSurvey?.answeredAtIso]),
     record.morningReturnedAtIso,
     record.sleepStartedAtIso,
     record.stimulusEndedAtIso,
@@ -307,7 +333,7 @@ function getRecordProgressTime(record: StudySessionRecordV3) {
   );
 }
 
-function hasMoreStudyProgress(candidate: StudySessionRecordV3, current: StudySessionRecordV3) {
+function hasMoreStudyProgress(candidate: StudySessionRecord, current: StudySessionRecord) {
   const candidateTime = getRecordProgressTime(candidate);
   const currentTime = getRecordProgressTime(current);
   if (candidateTime !== currentTime) return candidateTime > currentTime;
@@ -325,7 +351,10 @@ function hasMoreStudyProgress(candidate: StudySessionRecordV3, current: StudySes
   return candidateEvents > currentEvents;
 }
 
-function terminateInterruptedExposure(record: StudySessionRecordV3, now = Date.now()) {
+function terminateInterruptedExposure<RecordType extends StudySessionRecord>(
+  record: RecordType,
+  now = Date.now(),
+): RecordType {
   if (record.exposureStatus !== "in-progress" || record.conditionId === "control") return record;
   const stimulusStartedAt = record.stimulusStartedAtIso
     ? Date.parse(record.stimulusStartedAtIso)
@@ -371,7 +400,7 @@ function terminateInterruptedExposure(record: StudySessionRecordV3, now = Date.n
           }
         : { ...pause }
     )),
-  };
+  } as RecordType;
 }
 
 function TouchSessionControls({
@@ -667,8 +696,8 @@ function AdminPortal({ language, onExit }: { language: Language; onExit: () => v
                   <th>{tr(language, "Started", "开始时间")}</th>
                   <th>{tr(language, "Version", "版本")}</th>
                   <th>{tr(language, "Status", "状态")}</th>
-                  <th>{tr(language, "Pre KSS", "睡前 KSS")}</th>
-                  <th>{tr(language, "Post KSS", "睡后 KSS")}</th>
+                  <th>{tr(language, "Pre-exposure Karolinska score", "光照前卡罗林斯卡分数")}</th>
+                  <th>{tr(language, "Post-exposure / legacy post score", "光照后／旧版睡后分数")}</th>
                   <th>{tr(language, "Reaction mean", "平均反应")}</th>
                   <th>{tr(language, "Attention", "注意任务")}</th>
                   <th>{tr(language, "Feedback / question", "反馈 / 问题")}</th>
@@ -680,11 +709,22 @@ function AdminPortal({ language, onExit }: { language: Language; onExit: () => v
                 {filteredSessions.map((session) => {
                   const record = session.record;
                   const v3 = record.schemaVersion === 3 ? record : null;
+                  const v4 = record.schemaVersion === 4 ? record : null;
                   const hits = record.trials.filter((trial) => trial.status === "hit").length;
+                  const attentionReactionTimes = record.trials
+                    .filter((trial) => trial.status === "hit" && trial.reactionTimeMs !== null)
+                    .map((trial) => trial.reactionTimeMs as number);
+                  const attentionReactionMean = attentionReactionTimes.length
+                    ? attentionReactionTimes.reduce((sum, value) => sum + value, 0) /
+                      attentionReactionTimes.length
+                    : null;
                   const normalizedName = normalizeParticipantHistoryName(record.participantId);
                   const history = reviewByName.get(normalizedName);
-                  const exactProfile = v3?.participantProfileId
-                    ? profileById.get(v3.participantProfileId)
+                  const exactProfileId = record.schemaVersion === 2
+                    ? undefined
+                    : record.participantProfileId;
+                  const exactProfile = exactProfileId
+                    ? profileById.get(exactProfileId)
                     : undefined;
                   const historicalProfile = profileByName.get(normalizedName);
                   const profile = exactProfile ?? historicalProfile;
@@ -717,14 +757,14 @@ function AdminPortal({ language, onExit }: { language: Language; onExit: () => v
                         </td>
                         <td>
                           <strong>{conditionLabel(record.conditionId, language)}</strong>
-                          {profile ? <small>{profile.completedConditionIds.length}/5 {tr(language, "conditions complete", "项条件已完成")}</small> : null}
+                          {profile ? <small>{profile.completedSequencePositions.length}/4 {tr(language, "current-protocol sessions complete", "项当前版本实验已完成")}</small> : null}
                         </td>
                         <td>{new Date(record.startedAtIso).toLocaleString(language === "zh" ? "zh-CN" : "en")}</td>
-                        <td>v{record.schemaVersion}{v3?.studyBuildVersion ? <small>{v3.studyBuildVersion}</small> : <small>{tr(language, "historical", "历史版本")}</small>}</td>
+                        <td>v{record.schemaVersion}{record.schemaVersion !== 2 && record.studyBuildVersion ? <small>{record.studyBuildVersion}</small> : <small>{tr(language, "historical", "历史版本")}</small>}</td>
                         <td><span className={`status-pill ${record.status}`}>{record.status}</span></td>
-                        <td>{v3?.preSurvey.sleepinessKss ?? "—"}</td>
-                        <td>{v3?.postSurvey?.sleepinessKss ?? "—"}</td>
-                        <td>{v3?.reactionTest?.averageReactionTimeMs == null ? "—" : `${Math.round(v3.reactionTest.averageReactionTimeMs)} ms`}</td>
+                        <td>{v4?.preSurvey.sleepinessKss ?? v3?.preSurvey.sleepinessKss ?? "—"}</td>
+                        <td>{v4?.postExposureSurvey?.sleepinessKss ?? v3?.postSurvey?.sleepinessKss ?? "—"}</td>
+                        <td>{v4 ? (attentionReactionMean == null ? "—" : `${Math.round(attentionReactionMean)} ms`) : v3?.reactionTest?.averageReactionTimeMs == null ? "—" : `${Math.round(v3.reactionTest.averageReactionTimeMs)} ms`}</td>
                         <td>{v3?.conditionId === "control" ? tr(language, "N/A", "不适用") : `${hits}/${record.trials.length}`}</td>
                         <td>
                           {sessionFeedback.length ? sessionFeedback.map((item) => (
@@ -806,8 +846,8 @@ export default function Home() {
   const [countdown, setCountdown] = useState(3);
   const [remainingMs, setRemainingMs] = useState(SESSION_DURATION_MS);
   const [target, setTarget] = useState<{ trialNumber: number; x: number; y: number } | null>(null);
-  const [result, setResult] = useState<StudySessionRecordV3 | null>(null);
-  const [overnightRecord, setOvernightRecord] = useState<StudySessionRecordV3 | null>(null);
+  const [result, setResult] = useState<StudySessionRecord | null>(null);
+  const [overnightRecord, setOvernightRecord] = useState<StudySessionRecord | null>(null);
   const [storageAvailable, setStorageAvailable] = useState(true);
   const [draftProtection, setDraftProtection] = useState<DraftProtection>({
     sessionId: null,
@@ -815,7 +855,6 @@ export default function Home() {
     remoteStatus: "idle",
   });
   const [restoringDraft, setRestoringDraft] = useState(true);
-  const [clockNow, setClockNow] = useState(() => Date.now());
   const [useTouchControls, setUseTouchControls] = useState(() => {
     if (typeof window === "undefined" || typeof navigator === "undefined") return false;
     const coarsePointer = typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
@@ -851,8 +890,10 @@ export default function Home() {
   const preSurveyRef = useRef<PreStudySurvey | null>(null);
   const deviceBeforeRef = useRef<DeviceInfo | null>(null);
   const exposureStatusRef = useRef<ExposureStatus>("not-started");
-  const overnightRecordRef = useRef<StudySessionRecordV3 | null>(null);
+  const overnightRecordRef = useRef<StudySessionRecord | null>(null);
   const postSurveyRef = useRef<PostStudySurvey | null>(null);
+  const postExposureSurveyRef = useRef<PostExposureSurvey | null>(null);
+  const morningSurveyRef = useRef<MorningStudySurvey | null>(null);
   const trialPlanRef = useRef<PlannedTrial[]>([]);
   const nextPlannedTrialIndexRef = useRef(0);
   const trialsRef = useRef<TrialRecord[]>([]);
@@ -885,6 +926,9 @@ export default function Home() {
   const displayActiveTrialRef = useRef<() => void>(() => undefined);
   const checkpointActiveExposureRef = useRef<(includeRemoteBackup?: boolean) => void>(() => undefined);
   const finishExposureRef = useRef<(status?: "completed" | "terminated") => void>(() => undefined);
+  const applyRestoredRecordRef = useRef<(record: StudySessionRecord, resumeToken: string) => boolean>(
+    () => false,
+  );
   const endSequenceRef = useRef("");
   const terminationReasonRef = useRef<"end_sequence" | "touch_end" | "page_reload" | null>(null);
   const participantInputRef = useRef<HTMLInputElement>(null);
@@ -893,7 +937,7 @@ export default function Home() {
   const setupIsAdminMode = isAdminParticipantId(participantId);
   const resultIsTestMode = result ? isTestParticipantId(result.participantId) : false;
 
-  const setCurrentOvernightRecord = useCallback((record: StudySessionRecordV3 | null) => {
+  const setCurrentOvernightRecord = useCallback((record: StudySessionRecord | null) => {
     overnightRecordRef.current = record;
     setOvernightRecord(record);
   }, []);
@@ -1006,12 +1050,15 @@ export default function Home() {
         void (async () => {
           for (const record of retained) {
             try {
-              const profile = record.schemaVersion === 3 && record.participantProfileId
-                ? loadLocalParticipantProfiles().find((candidate) => candidate.profileId === record.participantProfileId)
+              const profileRecord = record.schemaVersion === 3 || record.schemaVersion === 4
+                ? record
                 : null;
-              if (record.schemaVersion === 3 && record.participantProfileId) {
+              const profile = profileRecord?.participantProfileId
+                ? loadLocalParticipantProfiles().find((candidate) => candidate.profileId === profileRecord.participantProfileId)
+                : null;
+              if (profileRecord?.participantProfileId) {
                 if (!profile) continue;
-                await uploadProfileStudySession(profile, record);
+                await uploadProfileStudySession(profile, profileRecord);
               } else {
                 await uploadStudySession(record);
               }
@@ -1031,14 +1078,23 @@ export default function Home() {
 
   useEffect(() => {
     let cancelled = false;
-    const applyRestoredRecord = (record: StudySessionRecordV3, resumeToken: string) => {
+    const applyRestoredRecord = (record: StudySessionRecord, resumeToken: string) => {
       if (cancelled) return false;
       const interrupted = record.exposureStatus === "in-progress";
       const restoredRecord = terminateInterruptedExposure(record);
       resumeTokenRef.current = resumeToken;
       participantRef.current = restoredRecord.participantId;
       participantProfileIdRef.current = restoredRecord.participantProfileId ?? null;
-      const restoredProfile = loadLocalParticipantProfile(restoredRecord.participantId);
+      const activeProfile = participantProfileRef.current;
+      const rememberedProfile = loadLocalParticipantProfile(restoredRecord.participantId);
+      const restoredProfile = (
+        activeProfile &&
+        activeProfile.displayName === restoredRecord.participantId &&
+        (
+          !restoredRecord.participantProfileId ||
+          activeProfile.profileId === restoredRecord.participantProfileId
+        )
+      ) ? activeProfile : rememberedProfile;
       const matchingProfile = restoredProfile && (
         !restoredRecord.participantProfileId || restoredProfile.profileId === restoredRecord.participantProfileId
       ) ? restoredProfile : null;
@@ -1071,7 +1127,13 @@ export default function Home() {
       deviceBeforeRef.current = restoredRecord.deviceInfo.beforeSleep;
       exposureStatusRef.current = restoredRecord.exposureStatus;
       terminationReasonRef.current = restoredRecord.terminationReason;
-      postSurveyRef.current = restoredRecord.postSurvey;
+      postSurveyRef.current = restoredRecord.schemaVersion === 3 ? restoredRecord.postSurvey : null;
+      postExposureSurveyRef.current = restoredRecord.schemaVersion === 4
+        ? restoredRecord.postExposureSurvey
+        : null;
+      morningSurveyRef.current = restoredRecord.schemaVersion === 4
+        ? restoredRecord.morningSurvey
+        : null;
       trialPlanRef.current = restoredRecord.trialPlan.map((trial) => ({ ...trial }));
       trialsRef.current = restoredRecord.trials.map((trial) => ({ ...trial }));
       falseClicksRef.current = restoredRecord.falseClicks.map((click) => ({ ...click }));
@@ -1090,12 +1152,11 @@ export default function Home() {
       const currentDevice = detectBrowserDeviceInfo();
       setDetectedDevice(currentDevice);
       setUseTouchControls(currentDevice.touchCapable);
-      setClockNow(Date.now());
       setCurrentOvernightRecord(restoredRecord);
       let localSaved = false;
       try {
         const localDraft: LocalOvernightDraft = {
-          storageVersion: 1,
+          storageVersion: restoredRecord.schemaVersion === 4 ? 2 : 1,
           resumeToken,
           record: restoredRecord,
         };
@@ -1106,7 +1167,13 @@ export default function Home() {
         setStorageAvailable(false);
       }
       setDraftProtection({ sessionId: restoredRecord.sessionId, localSaved, remoteStatus: "saving" });
-      if (restoredRecord.postSurvey) setPhase("reaction-test");
+      if (restoredRecord.schemaVersion === 4) {
+        if (restoredRecord.morningReturnedAtIso) setPhase("morning-survey");
+        else if (restoredRecord.sleepStartedAtIso) setPhase("awaiting-morning");
+        else if (restoredRecord.postExposureSurvey) setPhase("sleep-ready");
+        else if (restoredRecord.exposureStatus === "not-started") setPhase("instructions");
+        else setPhase("post-exposure-survey");
+      } else if (restoredRecord.postSurvey) setPhase("reaction-test");
       else if (restoredRecord.morningReturnedAtIso) setPhase("post-survey");
       else if (restoredRecord.sleepStartedAtIso) setPhase("awaiting-morning");
       else if (restoredRecord.exposureStatus === "not-started") setPhase("instructions");
@@ -1114,10 +1181,17 @@ export default function Home() {
 
       return interrupted;
     };
-    const persistInterruptedRecord = (record: StudySessionRecordV3, resumeToken: string) => {
+    applyRestoredRecordRef.current = applyRestoredRecord;
+    const persistInterruptedRecord = (record: StudySessionRecord, resumeToken: string) => {
+      const matchingProfile = participantProfileRef.current;
       const saveOperation = draftSaveChainRef.current
         .catch(() => undefined)
-        .then(() => saveStudyDraft(resumeToken, record, { keepalive: true }));
+        .then(() => (
+          record.schemaVersion === 4 &&
+          matchingProfile?.profileId === record.participantProfileId
+            ? saveParticipantStudyDraft(matchingProfile, record, { keepalive: true })
+            : saveStudyDraft(resumeToken, record, { keepalive: true })
+        ));
       draftSaveChainRef.current = saveOperation;
       void saveOperation.then(
         () => setDraftProtection((currentProtection) => (
@@ -1140,12 +1214,12 @@ export default function Home() {
           typeof parsed === "object"
           && parsed !== null
           && "storageVersion" in parsed
-          && parsed.storageVersion === 1
+          && (parsed.storageVersion === 1 || parsed.storageVersion === 2)
           && "resumeToken" in parsed
           && typeof parsed.resumeToken === "string"
           && /^[0-9a-f]{64}$/i.test(parsed.resumeToken)
           && "record" in parsed
-          && isStudySessionDraftV3(parsed.record)
+          && (isStudySessionDraftV3(parsed.record) || isStudySessionDraftV4(parsed.record))
         ) {
           savedDraft = parsed as LocalOvernightDraft;
         }
@@ -1169,10 +1243,17 @@ export default function Home() {
       let interruptedRecord = applyRestoredRecord(savedDraft.record, savedDraft.resumeToken);
       const initiallyAppliedRecord = overnightRecordRef.current;
       setRestoringDraft(false);
-      let remote: StudySessionRecordV3 | null = null;
+      let remote: StudySessionRecord | null = null;
       let remoteLookupFailed = false;
       try {
-        remote = await loadStudyDraft(savedDraft.resumeToken);
+        const restoredProfile = participantProfileRef.current;
+        remote = savedDraft.record.schemaVersion === 4
+          ? (
+              restoredProfile?.profileId === savedDraft.record.participantProfileId
+                ? await loadParticipantStudyDraft(restoredProfile)
+                : null
+            )
+          : await loadStudyDraft(savedDraft.resumeToken);
         const liveCurrent = overnightRecordRef.current;
         if (
           remote
@@ -1233,7 +1314,7 @@ export default function Home() {
     endSequenceRef.current = "";
   }, []);
 
-  const persistFinalLocally = useCallback((record: StudySessionRecordV3) => {
+  const persistFinalLocally = useCallback((record: StudySessionRecord) => {
     if (isReservedParticipantId(record.participantId)) {
       setStorageAvailable(true);
       return true;
@@ -1254,7 +1335,7 @@ export default function Home() {
     }
   }, []);
 
-  const saveRemoteRecord = useCallback((record: StudySessionRecordV3, onSuccess?: () => void) => {
+  const saveRemoteRecord = useCallback((record: StudySessionRecord, onSuccess?: () => void) => {
     if (isReservedParticipantId(record.participantId)) return;
     setRemoteSave({ sessionId: record.sessionId, status: "saving" });
     const profile = participantProfileRef.current;
@@ -1289,7 +1370,7 @@ export default function Home() {
   }, []);
 
   const saveOvernightDraft = useCallback((
-    record: StudySessionRecordV3,
+    record: StudySessionRecord,
     options: { requireLocal?: boolean } = {},
   ) => {
     if (isTestParticipantId(record.participantId)) {
@@ -1300,7 +1381,11 @@ export default function Home() {
     const token = resumeTokenRef.current;
     let localSaved = false;
     try {
-      const localDraft: LocalOvernightDraft = { storageVersion: 1, resumeToken: token, record };
+      const localDraft: LocalOvernightDraft = {
+        storageVersion: record.schemaVersion === 4 ? 2 : 1,
+        resumeToken: token,
+        record,
+      };
       localStorage.setItem(OVERNIGHT_DRAFT_KEY, JSON.stringify(localDraft));
       setStorageAvailable(true);
       localSaved = true;
@@ -1314,9 +1399,14 @@ export default function Home() {
     });
     if (options.requireLocal && !localSaved) return false;
     setCurrentOvernightRecord(record);
+    const profile = participantProfileRef.current;
     const saveOperation = draftSaveChainRef.current
       .catch(() => undefined)
-      .then(() => saveStudyDraft(token, record, { keepalive: true }));
+      .then(() => (
+        record.schemaVersion === 4 && profile?.profileId === record.participantProfileId
+          ? saveParticipantStudyDraft(profile, record, { keepalive: true })
+          : saveStudyDraft(token, record, { keepalive: true })
+      ));
     draftSaveChainRef.current = saveOperation;
     void saveOperation.then(
       () => setDraftProtection((current) => (
@@ -1329,7 +1419,7 @@ export default function Home() {
     return localSaved;
   }, [setCurrentOvernightRecord]);
 
-  const deleteLocalOvernightDraft = useCallback((record: StudySessionRecordV3) => {
+  const deleteLocalOvernightDraft = useCallback((record: StudySessionRecord) => {
     try {
       const parsed: unknown = JSON.parse(localStorage.getItem(OVERNIGHT_DRAFT_KEY) || "null");
       if (
@@ -1348,20 +1438,22 @@ export default function Home() {
     }
   }, []);
 
-  const deleteRemoteOvernightDraft = useCallback((record: StudySessionRecordV3) => {
-    if (!isTestParticipantId(record.participantId) && resumeTokenRef.current) {
+  const deleteRemoteOvernightDraft = useCallback((record: StudySessionRecord) => {
+    const profile = participantProfileRef.current;
+    if (
+      record.schemaVersion === 4 &&
+      profile?.profileId === record.participantProfileId
+    ) {
+      draftSaveChainRef.current = draftSaveChainRef.current
+        .catch(() => undefined)
+        .then(() => deleteParticipantStudyDraft(profile, record.sessionId).then(() => undefined));
+    } else if (!isTestParticipantId(record.participantId) && resumeTokenRef.current) {
       const token = resumeTokenRef.current;
       draftSaveChainRef.current = draftSaveChainRef.current
         .catch(() => undefined)
         .then(() => deleteStudyDraft(token));
     }
   }, []);
-
-  useEffect(() => {
-    if (phase !== "awaiting-morning") return;
-    const timer = window.setInterval(() => setClockNow(Date.now()), 30000);
-    return () => window.clearInterval(timer);
-  }, [phase]);
 
   const requestTouchEnd = useCallback(() => {
     if (touchEndArmedRef.current) {
@@ -1397,51 +1489,57 @@ export default function Home() {
     pausedRef.current = false;
   }, []);
 
-  const buildExposureRecord = useCallback((conditionIdForRecord: ConditionId): StudySessionRecordV3 => {
+  const buildExposureRecord = useCallback((conditionIdForRecord: V4ConditionId): StudySessionRecordV4 => {
     const condition = CONDITION_MAP[conditionIdForRecord];
     const beforeSleep = deviceBeforeRef.current;
     const preSurvey = preSurveyRef.current;
     if (!beforeSleep || !preSurvey) throw new Error("The pre-study questionnaire is incomplete.");
-    const isControl = condition.id === "control";
+    const participantProfileId = participantProfileIdRef.current ??
+      (isTestParticipantId(participantRef.current) ? TEST_PROFILE_ID : null);
+    if (!participantProfileId) throw new Error("The participant account is not available.");
     return {
-      schemaVersion: 3,
-      protocolVersion: "overnight-v1",
+      schemaVersion: 4,
+      protocolVersion: "overnight-v2",
+      sequenceVersion: "fixed-four-v1",
+      sequencePosition: sequencePositionForCondition(conditionIdForRecord),
       attentionProtocolVersion: "sparse-4-50-70-v1",
       sessionId: sessionIdRef.current,
       participantId: participantRef.current,
-      ...(participantProfileIdRef.current ? { participantProfileId: participantProfileIdRef.current } : {}),
+      participantProfileId,
       studyBuildVersion: STUDY_BUILD_VERSION,
-      conditionId: condition.id,
+      conditionId: conditionIdForRecord,
       conditionName: condition.name,
-      stimulusColorHex: condition.color,
-      stimulusColorRgb: condition.rgb,
-      plannedDurationMs: isControl ? 0 : SESSION_DURATION_MS,
-      plannedEndAtIso: isControl ? null : plannedEndAtIsoRef.current,
-      actualDurationMs: isControl ? 0 : exposureActualDurationRef.current,
-      wallClockDurationMs: isControl ? 0 : exposureWallClockDurationRef.current,
-      totalPausedDurationMs: isControl ? 0 : totalPausedMsRef.current,
+      stimulusColorHex: condition.color as string,
+      stimulusColorRgb: condition.rgb as string,
+      plannedDurationMs: SESSION_DURATION_MS,
+      plannedEndAtIso: plannedEndAtIsoRef.current,
+      actualDurationMs: exposureActualDurationRef.current,
+      wallClockDurationMs: exposureWallClockDurationRef.current,
+      totalPausedDurationMs: totalPausedMsRef.current,
       crossVisibleMs: CROSS_VISIBLE_MS,
       startedAtIso: startedAtIsoRef.current,
-      stimulusStartedAtIso: isControl ? null : stimulusStartedAtIsoRef.current,
-      stimulusEndedAtIso: isControl ? null : stimulusEndedAtIsoRef.current,
+      stimulusStartedAtIso: stimulusStartedAtIsoRef.current,
+      stimulusEndedAtIso: stimulusEndedAtIsoRef.current,
       sleepStartedAtIso: null,
       morningReturnedAtIso: null,
       assessmentCompletedAtIso: null,
       endedAtIso: null,
       status: "active",
-      exposureStatus: isControl ? "not-applicable" : exposureStatusRef.current,
-      terminationReason: isControl ? null : terminationReasonRef.current,
-      fullscreenAtStart: isControl ? false : fullscreenAtStartRef.current,
-      fullscreenRequestFailed: isControl ? false : fullscreenRequestFailedRef.current,
+      exposureStatus: exposureStatusRef.current === "not-applicable"
+        ? "not-started"
+        : exposureStatusRef.current,
+      terminationReason: terminationReasonRef.current,
+      fullscreenAtStart: fullscreenAtStartRef.current,
+      fullscreenRequestFailed: fullscreenRequestFailedRef.current,
       deviceInfo: { beforeSleep, afterWaking: null, deviceChanged: null },
       preSurvey,
-      postSurvey: null,
-      reactionTest: null,
-      trialPlan: isControl ? [] : trialPlanRef.current.map((trial) => ({ ...trial })),
-      trials: isControl ? [] : trialsRef.current.map((trial) => ({ ...trial })),
-      falseClicks: isControl ? [] : falseClicksRef.current.map((click) => ({ ...click })),
-      pauses: isControl ? [] : pausesRef.current.map((pause) => ({ ...pause })),
-      environmentEvents: isControl ? [] : environmentEventsRef.current.map((event) => ({ ...event })),
+      postExposureSurvey: postExposureSurveyRef.current,
+      morningSurvey: morningSurveyRef.current,
+      trialPlan: trialPlanRef.current.map((trial) => ({ ...trial })),
+      trials: trialsRef.current.map((trial) => ({ ...trial })),
+      falseClicks: falseClicksRef.current.map((click) => ({ ...click })),
+      pauses: pausesRef.current.map((pause) => ({ ...pause })),
+      environmentEvents: environmentEventsRef.current.map((event) => ({ ...event })),
     };
   }, []);
 
@@ -1457,9 +1555,9 @@ export default function Home() {
       Math.round(nowPerformance - startedAtPerformanceRef.current),
     );
 
-    let record: StudySessionRecordV3;
+    let record: StudySessionRecordV4;
     try {
-      record = buildExposureRecord(conditionRef.current);
+      record = buildExposureRecord(conditionRef.current as V4ConditionId);
       record.totalPausedDurationMs = Math.max(
         record.totalPausedDurationMs,
         record.wallClockDurationMs - record.actualDurationMs,
@@ -1664,9 +1762,9 @@ export default function Home() {
     setRemainingMs(Math.max(0, SESSION_DURATION_MS - exposureActualDurationRef.current));
 
     try {
-      const record = buildExposureRecord(conditionRef.current);
+      const record = buildExposureRecord(conditionRef.current as V4ConditionId);
       saveOvernightDraft(record);
-      setPhase("sleep-ready");
+      setPhase("post-exposure-survey");
     } catch (error) {
       setFormError(error instanceof Error ? error.message : tr(language, "The overnight record could not be prepared.", "无法准备整晚实验记录。"));
       setPhase("setup");
@@ -1766,7 +1864,7 @@ export default function Home() {
     setRemainingMs(SESSION_DURATION_MS);
     try {
       const locallyProtected = saveOvernightDraft(
-        buildExposureRecord(conditionRef.current),
+        buildExposureRecord(conditionRef.current as V4ConditionId),
         { requireLocal: true },
       );
       if (!locallyProtected && !isTestParticipantId(participantRef.current)) {
@@ -1920,7 +2018,7 @@ export default function Home() {
 
   const initializeSession = (
     cleanParticipantId: string,
-    selectedConditionId: ConditionId,
+    selectedConditionId: V4ConditionId,
     participantProfileId: string | null = null,
   ) => {
     participantRef.current = cleanParticipantId;
@@ -1943,9 +2041,11 @@ export default function Home() {
     fullscreenRequestFailedRef.current = false;
     preSurveyRef.current = null;
     deviceBeforeRef.current = null;
-    exposureStatusRef.current = selectedConditionId === "control" ? "not-applicable" : "not-started";
+    exposureStatusRef.current = "not-started";
     postSurveyRef.current = null;
-    trialPlanRef.current = selectedConditionId === "control" ? [] : makeTrialPlan();
+    postExposureSurveyRef.current = null;
+    morningSurveyRef.current = null;
+    trialPlanRef.current = makeTrialPlan();
     nextPlannedTrialIndexRef.current = 0;
     pendingPlannedTrialRef.current = null;
     trialsRef.current = [];
@@ -1971,6 +2071,40 @@ export default function Home() {
     controlModeOverrideRef.current = null;
   };
 
+  const openAssignedSession = async (
+    profile: LocalParticipantProfile,
+    progress: ParticipantProgress,
+  ) => {
+    const remoteDraft = await loadParticipantStudyDraft(profile);
+    if (remoteDraft && isFreshDraft(remoteDraft)) {
+      const resumeToken = makeResumeToken();
+      applyRestoredRecordRef.current(remoteDraft, resumeToken);
+      setFormError(tr(
+        language,
+        "Your unfinished session was restored from your account.",
+        "已从你的账户恢复未完成的实验。",
+      ));
+      return;
+    }
+    if (remoteDraft) {
+      await deleteParticipantStudyDraft(profile, remoteDraft.sessionId).catch(() => undefined);
+    }
+    const assignedCondition = progress.nextConditionId;
+    if (!assignedCondition) {
+      setConditionId(null);
+      setFormError(tr(
+        language,
+        "You have completed all four assigned sessions. No additional condition is available.",
+        "你已经完成全部四次指定实验，目前没有新的条件。",
+      ));
+      return;
+    }
+    setConditionId(assignedCondition);
+    initializeSession(profile.displayName, assignedCondition, profile.profileId);
+    setFormError("");
+    setPhase("tutorial");
+  };
+
   const startSession = async () => {
     if (restoringDraft) {
       setFormError(tr(language, "Please wait while this browser checks for saved overnight progress.", "请稍候，浏览器正在检查已保存的整晚实验进度。"));
@@ -1984,8 +2118,8 @@ export default function Home() {
       setPhase("admin");
       return;
     }
-    if (!cleanParticipantId || !conditionId) {
-      setFormError(tr(language, "Enter your study name and select the assigned condition.", "请输入实验姓名，并选择研究者分配的条件。"));
+    if (!cleanParticipantId || (isTestParticipantId(cleanParticipantId) && !conditionId)) {
+      setFormError(tr(language, "Enter your study name. Test mode must also select a condition.", "请输入实验姓名；测试模式还需要选择一个条件。"));
       requestAnimationFrame(() => {
         if (!cleanParticipantId) participantInputRef.current?.focus();
         else document.querySelector<HTMLInputElement>('input[name="light-condition"]')?.focus();
@@ -1999,11 +2133,14 @@ export default function Home() {
     }
     if (isTestParticipantId(cleanParticipantId)) {
       try {
+        if (!conditionId || !(V4_CONDITION_ORDER as readonly string[]).includes(conditionId)) {
+          throw new Error("Select one of the four current protocol conditions.");
+        }
         participantProfileRef.current = null;
         setParticipantProfile(null);
         setParticipantProgress(null);
         setParticipantProgressStatus("idle");
-        initializeSession(cleanParticipantId, conditionId);
+        initializeSession(cleanParticipantId, conditionId as V4ConditionId);
         setFormError("");
         setPhase("tutorial");
       } catch (error) {
@@ -2017,11 +2154,12 @@ export default function Home() {
       activeProfile
       && normalizeParticipantName(activeProfile.displayName).toLowerCase() === cleanParticipantId.toLowerCase()
     ) {
-      if (participantProgressStatus !== "loaded" || !participantProgress) {
+      let progress = participantProgress;
+      if (participantProgressStatus !== "loaded" || !progress) {
         setProfileChecking(true);
         setParticipantProgressStatus("loading");
         try {
-          const progress = await fetchParticipantProgress(activeProfile);
+          progress = await fetchParticipantProgress(activeProfile);
           setParticipantProgress(progress);
           setParticipantProgressStatus("loaded");
         } catch {
@@ -2036,13 +2174,19 @@ export default function Home() {
           setProfileChecking(false);
         }
       }
-      initializeSession(
-        activeProfile.displayName,
-        conditionId,
-        activeProfile.profileId,
-      );
-      setFormError("");
-      setPhase("tutorial");
+      if (!progress) return;
+      setProfileChecking(true);
+      try {
+        await openAssignedSession(activeProfile, progress);
+      } catch {
+        setFormError(tr(
+          language,
+          "Your account opened, but its unfinished session could not be checked. Check the connection and try again.",
+          "账户已打开，但暂时无法检查未完成的实验。请检查网络后重试。",
+        ));
+      } finally {
+        setProfileChecking(false);
+      }
       return;
     }
 
@@ -2095,13 +2239,7 @@ export default function Home() {
       const progress = await fetchParticipantProgress(localProfile);
       setParticipantProgress(progress);
       setParticipantProgressStatus("loaded");
-      initializeSession(
-        localProfile.displayName,
-        conditionId,
-        localProfile.profileId,
-      );
-      setFormError("");
-      setPhase("tutorial");
+      await openAssignedSession(localProfile, progress);
     } catch (error) {
       const message = error instanceof Error ? error.message : "";
       if (openedProfile) {
@@ -2151,10 +2289,10 @@ export default function Home() {
     startedAtIsoRef.current = survey.answeredAtIso;
     setUseTouchControls(deviceInfo.touchCapable);
     try {
-      const record = buildExposureRecord(conditionRef.current);
+      const record = buildExposureRecord(conditionRef.current as V4ConditionId);
       saveOvernightDraft(record);
       setFormError("");
-      setPhase(conditionRef.current === "control" ? "sleep-ready" : "instructions");
+      setPhase("instructions");
     } catch (error) {
       setFormError(error instanceof Error ? error.message : tr(language, "The overnight record could not be prepared.", "无法准备整晚实验记录。"));
       setPhase("setup");
@@ -2164,28 +2302,26 @@ export default function Home() {
   const markSleepStarted = () => {
     const record = overnightRecordRef.current;
     if (!record) return;
+    if (record.schemaVersion === 4 && !record.postExposureSurvey) return;
     const sleepStartedAt = new Date();
-    const nextRecord: StudySessionRecordV3 = { ...record, sleepStartedAtIso: sleepStartedAt.toISOString() };
+    const nextRecord: StudySessionRecord = {
+      ...record,
+      sleepStartedAtIso: sleepStartedAt.toISOString(),
+    };
     const savedLocally = saveOvernightDraft(nextRecord, { requireLocal: true });
     if (!savedLocally && !isTestParticipantId(record.participantId)) {
       setFormError(tr(language, "The sleep-start checkpoint could not be saved in this browser. Enable site storage and try again before closing the page.", "无法在此浏览器保存入睡节点。请允许网站存储，然后在关闭页面前重试。"));
       return;
     }
     setFormError("");
-    setClockNow(Date.now());
     setPhase("awaiting-morning");
   };
 
   const continueAfterWaking = () => {
     const record = overnightRecordRef.current;
-    if (!record) return;
-    const sleepStartedAt = record.sleepStartedAtIso ? Date.parse(record.sleepStartedAtIso) : Number.NaN;
-    if (
-      !isTestParticipantId(record.participantId)
-      && (!Number.isFinite(sleepStartedAt) || Date.now() - sleepStartedAt < MINIMUM_SLEEP_INTERVAL_MS)
-    ) return;
+    if (!record || !record.sleepStartedAtIso) return;
     const afterWaking = detectBrowserDeviceInfo();
-    const nextRecord: StudySessionRecordV3 = {
+    const nextRecord: StudySessionRecord = {
       ...record,
       morningReturnedAtIso: new Date().toISOString(),
       deviceInfo: {
@@ -2202,12 +2338,12 @@ export default function Home() {
       return;
     }
     setFormError("");
-    setPhase("post-survey");
+    setPhase(record.schemaVersion === 4 ? "morning-survey" : "post-survey");
   };
 
   const submitPostSurvey = (survey: PostStudySurvey, afterWakingDevice: DeviceInfo) => {
     const record = overnightRecordRef.current;
-    if (!record) return;
+    if (!record || record.schemaVersion !== 3) return;
     postSurveyRef.current = survey;
     const nextRecord: StudySessionRecordV3 = {
       ...record,
@@ -2229,7 +2365,12 @@ export default function Home() {
 
   const completeReactionTest = (reactionTest: ReactionTestRecord) => {
     const record = overnightRecordRef.current;
-    if (!record || !record.postSurvey || !record.deviceInfo.afterWaking) return;
+    if (
+      !record ||
+      record.schemaVersion !== 3 ||
+      !record.postSurvey ||
+      !record.deviceInfo.afterWaking
+    ) return;
     const endedAtIso = reactionTest.completedAtIso;
     const completedRecord: StudySessionRecordV3 = {
       ...record,
@@ -2258,6 +2399,73 @@ export default function Home() {
       deleteLocalOvernightDraft(completedRecord);
       deleteRemoteOvernightDraft(completedRecord);
       clearReactionTestProgress(completedRecord.sessionId);
+    });
+  };
+
+  const submitPostExposureSurvey = (survey: PostExposureSurvey) => {
+    const record = overnightRecordRef.current;
+    if (!record || record.schemaVersion !== 4 || !record.stimulusEndedAtIso) return;
+    postExposureSurveyRef.current = survey;
+    const nextRecord: StudySessionRecordV4 = {
+      ...record,
+      postExposureSurvey: survey,
+    };
+    const savedLocally = saveOvernightDraft(nextRecord, { requireLocal: true });
+    if (!savedLocally && !isTestParticipantId(record.participantId)) {
+      setFormError(tr(
+        language,
+        "The immediate sleepiness scale could not be saved. Enable site storage and submit again.",
+        "无法保存画面结束后的困倦量表。请允许网站存储后重新提交。",
+      ));
+      return;
+    }
+    setFormError("");
+    setPhase("sleep-ready");
+  };
+
+  const submitMorningSurvey = (survey: MorningStudySurvey, afterWakingDevice: DeviceInfo) => {
+    const record = overnightRecordRef.current;
+    if (
+      !record ||
+      record.schemaVersion !== 4 ||
+      !record.postExposureSurvey ||
+      !record.morningReturnedAtIso
+    ) return;
+    morningSurveyRef.current = survey;
+    const endedAtIso = survey.answeredAtIso;
+    const completedRecord: StudySessionRecordV4 = {
+      ...record,
+      status: record.exposureStatus === "terminated" ? "terminated" : "completed",
+      assessmentCompletedAtIso: endedAtIso,
+      endedAtIso,
+      morningSurvey: survey,
+      deviceInfo: {
+        ...record.deviceInfo,
+        afterWaking: afterWakingDevice,
+        deviceChanged:
+          afterWakingDevice.confirmedCategory !== record.deviceInfo.beforeSleep.confirmedCategory,
+      },
+    };
+    const isTestMode = isTestParticipantId(completedRecord.participantId);
+    if (!isStudySessionRecordV4(completedRecord, { allowReservedParticipantId: isTestMode })) {
+      setResult(completedRecord);
+      setFormError(tr(
+        language,
+        "The completed study record did not pass validation. Download the recovery JSON and contact the researcher before closing this page.",
+        "完成的实验记录未通过验证。请下载恢复 JSON，并在关闭页面前联系研究者。",
+      ));
+      setPhase("results");
+      return;
+    }
+    const finalSavedLocally = persistFinalLocally(completedRecord);
+    if (finalSavedLocally) deleteLocalOvernightDraft(completedRecord);
+    setCurrentOvernightRecord(null);
+    setFormError("");
+    setResult(completedRecord);
+    setPhase("results");
+    saveRemoteRecord(completedRecord, () => {
+      deleteLocalOvernightDraft(completedRecord);
+      deleteRemoteOvernightDraft(completedRecord);
     });
   };
 
@@ -2361,10 +2569,10 @@ export default function Home() {
       <StudyTutorial
         language={language}
         displayName={participantId}
-        assignedConditionId={conditionId}
-        completedConditionIds={participantProgress?.completedConditionIds ?? []}
+        assignedConditionId={conditionId as V4ConditionId}
+        completedSequencePositions={participantProgress?.completedSequencePositions ?? []}
         isTestMode={setupIsTestMode}
-        onContinue={() => setPhase(conditionId === "control" ? "pre-survey" : "practice")}
+        onContinue={() => setPhase("practice")}
       />
     );
   }
@@ -2419,8 +2627,8 @@ export default function Home() {
           </ul>
           <p className="instruction-reminder">
             {language === "zh"
-              ? <><strong>没有十字时的点击或多余点击也会被记录。</strong>光照结束后，请继续<strong>正常睡一整晚</strong>。</>
-              : <><strong>Responses made when no cross is visible, including extra responses, are recorded.</strong> After exposure, continue to a <strong>normal full night of sleep</strong>.</>}
+              ? <><strong>不要切换应用、查看消息、浏览网页或使用另一个屏幕。</strong>没有十字时的点击或多余点击也会被记录。如果画面造成不适，请<strong>立即停止</strong>。</>
+              : <><strong>Do not switch apps, read messages, browse, or use another screen during the five-minute display.</strong> Responses made when no cross is visible are recorded. <strong>Stop if the display causes discomfort.</strong></>}
           </p>
           {!setupIsTestMode ? (
             <p
@@ -2545,6 +2753,16 @@ export default function Home() {
     );
   }
 
+  if (phase === "post-exposure-survey") {
+    return (
+      <PostExposureSurveyForm
+        language={language}
+        saveError={formError}
+        onSubmit={submitPostExposureSurvey}
+      />
+    );
+  }
+
   if (phase === "sleep-ready" && overnightRecord) {
     const isControl = overnightRecord.conditionId === "control";
     const isTestMode = isTestParticipantId(overnightRecord.participantId);
@@ -2558,8 +2776,8 @@ export default function Home() {
     return (
       <main className="overnight-shell">
         <section className="overnight-card" aria-labelledby="sleep-ready-title">
-          <p className="eyebrow">{tr(language, "Tonight's condition is ready", "今晚的条件已完成准备")}</p>
-          <h1 id="sleep-ready-title">{tr(language, "Continue with a normal full night of sleep.", "接下来请按照平常方式睡一整晚。")}</h1>
+          <p className="eyebrow">{tr(language, "Screen exposure and immediate scale saved", "屏幕暴露和即时量表已保存")}</p>
+          <h1 id="sleep-ready-title">{tr(language, "Go to bed at your normal time.", "请在平常时间上床睡觉。")}</h1>
           <p>
             {isControl
               ? tr(language, "This is the control condition. No color or brightness stimulus was shown.", "这是对照条件，没有播放任何颜色或亮度刺激。")
@@ -2569,11 +2787,11 @@ export default function Home() {
           </p>
           <div className="overnight-status-grid">
             <div><span>{tr(language, "Condition", "实验条件")}</span><strong>{conditionLabel(overnightRecord.conditionId, language)}</strong></div>
-            <div><span>{tr(language, "Pre-sleep KSS", "睡前 KSS")}</span><strong>{overnightRecord.preSurvey.sleepinessKss} / 9</strong></div>
+            <div><span>{tr(language, "Pre-exposure Karolinska Sleepiness Scale", "光照前卡罗林斯卡困倦量表")}</span><strong>{overnightRecord.preSurvey.sleepinessKss} / 9</strong></div>
             <div><span>{tr(language, "Device", "设备")}</span><strong>{deviceCategoryLabel(overnightRecord.deviceInfo.beforeSleep.confirmedCategory, language)}</strong></div>
           </div>
           <p className="overnight-guidance">
-            {tr(language, "When you are ready to put the device away and sleep, press the button below. You may close or lock the device afterward. Return in this same browser after waking, within 48 hours.", "准备放下设备睡觉时，请点击下方按钮。之后可以关闭网页或锁定设备；醒来后请在 48 小时内用同一浏览器返回。")}
+            {tr(language, "Do not go to bed earlier or later for the experiment. At your normal bedtime, press the button below and put the device away. After waking, return within 48 hours; sign in again if you use another browser or device.", "不要为了实验提前或推迟上床。在平常睡觉时间点击下方按钮并放下设备。睡醒后请在 48 小时内返回；若使用其他浏览器或设备，请重新登录。")}
           </p>
           <p className={`draft-save-note ${protectionClass}`} role="status">
             {isTestMode
@@ -2600,42 +2818,39 @@ export default function Home() {
   }
 
   if (phase === "awaiting-morning" && overnightRecord) {
-    const isTestMode = isTestParticipantId(overnightRecord.participantId);
-    const sleepStartedAt = overnightRecord.sleepStartedAtIso
-      ? Date.parse(overnightRecord.sleepStartedAtIso)
-      : Number.NaN;
-    const earliestReturnAt = Number.isFinite(sleepStartedAt)
-      ? sleepStartedAt + MINIMUM_SLEEP_INTERVAL_MS
-      : Number.POSITIVE_INFINITY;
-    const canContinueMorning = isTestMode || clockNow >= earliestReturnAt;
     return (
       <main className="overnight-shell morning-return-shell">
         <section className="overnight-card" aria-labelledby="morning-return-title">
           <p className="eyebrow">{tr(language, "Overnight pause", "整晚等待")}</p>
           <h1 id="morning-return-title">{tr(language, "Sleep normally. Return here after waking.", "请正常睡眠，醒来后返回此页。")}</h1>
-          <p>{tr(language, "The browser may be closed or the device may be locked. Reopen this page in the same browser when the full night of sleep is over.", "可以关闭浏览器或锁定设备。完成一整晚睡眠后，请在同一浏览器重新打开此页面。")}</p>
+          <p>{tr(language, "The browser may be closed or the device may be locked. After your normal sleep, sign in again on any browser if needed; your saved progress can be restored.", "可以关闭浏览器或锁定设备。按照平常方式睡醒后，如有需要，可在任意浏览器重新登录并恢复已保存进度。")}</p>
           <div className="overnight-status-grid">
             <div><span>{tr(language, "Study name", "实验姓名")}</span><strong>{overnightRecord.participantId}</strong></div>
             <div><span>{tr(language, "Sleep marked at", "标记入睡时间")}</span><strong>{formatDateTime(overnightRecord.sleepStartedAtIso, language)}</strong></div>
             <div><span>{tr(language, "Condition", "实验条件")}</span><strong>{conditionLabel(overnightRecord.conditionId, language)}</strong></div>
           </div>
           <p className="overnight-guidance">{tr(language, "There is no required washout day in this website. Follow the researcher's assigned schedule; consecutive-night sessions are allowed.", "网站不强制要求间隔一天。请按照研究者安排的日期和顺序；可以连续两晚进行不同实验。")}</p>
-          {!canContinueMorning ? (
-            <p className="draft-save-note" role="status">
-              {tr(language, `To prevent an accidental immediate return, the morning check opens at ${new Date(earliestReturnAt).toLocaleString("en")} (four hours after sleep was marked).`, `为防止误操作，早晨问卷将在 ${new Date(earliestReturnAt).toLocaleString("zh-CN")} 开放（标记入睡四小时后）。`)}
-            </p>
-          ) : null}
           {formError ? <p className="form-error" role="alert">{formError}</p> : null}
           <button
             className="primary-button overnight-primary"
             type="button"
             onClick={continueAfterWaking}
-            disabled={!canContinueMorning}
           >
             {tr(language, "I have woken up — continue", "我已经醒来——继续")}
           </button>
         </section>
       </main>
+    );
+  }
+
+  if (phase === "morning-survey") {
+    return (
+      <MorningSurveyForm
+        language={language}
+        detectedDevice={detectedDevice}
+        saveError={formError}
+        onSubmit={submitMorningSurvey}
+      />
     );
   }
 
@@ -2650,7 +2865,7 @@ export default function Home() {
     );
   }
 
-  if (phase === "reaction-test" && overnightRecord) {
+  if (phase === "reaction-test" && overnightRecord && overnightRecord.schemaVersion === 3) {
     return (
       <ReactionTest
         language={language}
@@ -2663,7 +2878,19 @@ export default function Home() {
   }
 
   if (phase === "results" && result && summary) {
-    const reactionMean = result.reactionTest?.averageReactionTimeMs;
+    const isCurrentProtocol = result.schemaVersion === 4;
+    const reactionMean = isCurrentProtocol
+      ? summary.meanAttentionReactionTime
+      : result.reactionTest?.averageReactionTimeMs ?? null;
+    const alreadyCompletedPositions = new Set(
+      participantProgress?.completedSequencePositions ?? [],
+    );
+    if (
+      isCurrentProtocol &&
+      result.exposureStatus === "completed"
+    ) alreadyCompletedPositions.add(result.sequencePosition);
+    const completedCount = alreadyCompletedPositions.size;
+    const remainingCount = Math.max(0, 4 - completedCount);
     return (
       <main className="results-shell">
         <section className="results-card">
@@ -2672,18 +2899,26 @@ export default function Home() {
             ? tr(language, "Exposure ended early", "光照提前结束")
             : resultIsTestMode
               ? tr(language, "Test mode", "测试模式")
-              : tr(language, "Overnight session complete", "整晚实验已完成")}</p>
+              : tr(language, "Session complete", "本次实验已完成")}</p>
           <h1>{resultIsTestMode ? tr(language, "Test session complete.", "测试实验完成。") : tr(language, "Thank you. The full record is complete.", "谢谢，完整实验记录已完成。")}</h1>
           <p className="results-lead">
-            {tr(language, "Study name ", "实验姓名 ")}<strong>{result.participantId}</strong>{tr(language, " completed the ", " 已完成 ")}<strong>{conditionLabel(result.conditionId, language)}</strong>{tr(language, " overnight condition.", " 整晚条件。")}
+            {tr(language, "Study name ", "实验姓名 ")}<strong>{result.participantId}</strong>{tr(language, " completed the ", " 已完成 ")}<strong>{conditionLabel(result.conditionId, language)}</strong>{tr(language, " session.", " 条件。")}
           </p>
 
           <div className="result-stats" aria-label={tr(language, "Session summary", "实验汇总")}>
-            <div><span>{tr(language, "Pre-sleep KSS", "睡前 KSS")}</span><strong>{result.preSurvey.sleepinessKss}<small> / 9</small></strong></div>
-            <div><span>{tr(language, "Post-sleep KSS", "睡后 KSS")}</span><strong>{result.postSurvey?.sleepinessKss}<small> / 9</small></strong></div>
-            <div><span>{tr(language, "Reaction mean", "平均反应时间")}</span><strong>{reactionMean == null ? "—" : Math.round(reactionMean)}<small>{reactionMean == null ? "" : " ms"}</small></strong></div>
-            <div><span>{tr(language, "Valid reaction trials", "有效反应次数")}</span><strong>{result.reactionTest?.validCount ?? 0}<small> / 3</small></strong></div>
+            <div><span>{tr(language, "Pre-exposure Karolinska Sleepiness Scale", "光照前卡罗林斯卡困倦量表")}</span><strong>{result.preSurvey.sleepinessKss}<small> / 9</small></strong></div>
+            <div><span>{isCurrentProtocol ? tr(language, "Post-exposure Karolinska Sleepiness Scale", "光照后卡罗林斯卡困倦量表") : tr(language, "Legacy after-waking Karolinska Sleepiness Scale", "旧版睡醒后卡罗林斯卡困倦量表")}</span><strong>{isCurrentProtocol ? result.postExposureSurvey?.sleepinessKss ?? "—" : result.postSurvey?.sleepinessKss ?? "—"}<small> / 9</small></strong></div>
+            <div><span>{tr(language, "Exposure reaction mean", "观看期间平均反应时间")}</span><strong>{reactionMean == null ? "—" : Math.round(reactionMean)}<small>{reactionMean == null ? "" : " ms"}</small></strong></div>
+            <div><span>{tr(language, "Time watched", "实际观看时长")}</span><strong>{(result.actualDurationMs / 1000).toFixed(1)}<small> s</small></strong></div>
           </div>
+
+          {isCurrentProtocol && !resultIsTestMode ? (
+            <p className="session-event-summary" role="status">
+              <strong>{completedCount}</strong> {tr(language, "complete", "项已完成")}
+              <span>·</span>
+              <strong>{remainingCount}</strong> {tr(language, "remaining", "项待完成")}
+            </p>
+          ) : null}
 
           {result.conditionId !== "control" ? (
             <p className="session-event-summary">
@@ -2826,7 +3061,7 @@ export default function Home() {
       <nav className="topbar" aria-label={tr(language, "Study information", "研究信息")}>
         <a href="#setup" className="brand"><span className="brand-dot" />Sleep Light Study</a>
         <div className="topbar-tools">
-          <span className="protocol-tag">Protocol SL-OV1 · {tr(language, "Overnight", "整晚")}</span>
+          <span className="protocol-tag">Protocol SL-V4 · {tr(language, "Fixed four-session order", "固定四次顺序")}</span>
           <div className="language-toggle" role="group" aria-label={tr(language, "Choose language", "选择语言")}>
             <button type="button" aria-pressed={language === "en"} onClick={() => changeLanguage("en")}>English</button>
             <button type="button" aria-pressed={language === "zh"} onClick={() => changeLanguage("zh")}>中文</button>
@@ -2836,15 +3071,33 @@ export default function Home() {
 
       <div className="setup-grid" id="setup">
         <section className="intro-panel">
-          <p className="eyebrow"><span className="live-dot" />{tr(language, "Overnight sleep protocol", "整晚睡眠研究流程")}</p>
-          <h1>{tr(language, "Complete tonight's condition.", "完成今晚的实验条件。")}<br />{tr(language, "Return after waking.", "醒来后请返回。")}</h1>
+          <p className="eyebrow"><span className="live-dot" />{tr(language, "Pre-sleep screen-color research", "睡前屏幕颜色研究")}</p>
+          <h1>
+            {tr(
+              language,
+              "A study of how short pre-sleep screen-color exposure relates to immediate and next-morning alertness.",
+              "研究短时间睡前屏幕颜色暴露与即时及第二天早晨清醒程度之间的关系。",
+            )}
+          </h1>
           <p className="intro-copy">
-            {tr(language, "A whole-night study comparing four five-minute pre-sleep light exposures with a no-exposure normal-sleep control.", "本整晚研究比较四种睡前五分钟光照条件，以及不进行光照的正常睡眠对照条件。")}
+            {tr(
+              language,
+              "Do not change your normal bedtime for this study. Do not go to bed earlier or later for the experiment.",
+              "请不要为了本研究改变平常的睡觉时间；不要因实验而提前或推迟上床。",
+            )}
+          </p>
+          <p className="intro-copy">
+            {language === "zh"
+              ? <><strong>安全：</strong>如果你有光敏性癫痫病史，或闪烁、快速出现的视觉刺激会让你明显不适，请不要参加。画面造成不适时，请立即停止。</>
+              : <><strong>Safety:</strong> Do not participate if you have a history of photosensitive seizures or significant discomfort with flashing or rapidly appearing visual stimuli. Stop the session if the display causes discomfort.</>}
           </p>
           <ol className="study-steps">
-            <li><span>01</span><div><strong>{tr(language, "Before sleep", "睡前")}</strong><p>{tr(language, "Read the tutorial, then complete the questionnaire and assigned condition.", "阅读教程，然后填写问卷并完成分配的条件。")}</p></div></li>
-            <li><span>02</span><div><strong>{tr(language, "Sleep normally", "正常睡眠")}</strong><p>{tr(language, "Put the device away and get a normal full night of sleep.", "放下设备，按照平常方式睡一整晚。")}</p></div></li>
-            <li><span>03</span><div><strong>{tr(language, "After waking", "醒来后")}</strong><p>{tr(language, "Return for KSS, three relaxed reactions, and optional feedback.", "返回完成 KSS、三次放松反应和可选反馈。")}</p></div></li>
+            <li><span>01</span><div><strong>{tr(language, "Tutorial", "教程")}</strong><p>{tr(language, "Read safety, device, and attention instructions.", "阅读安全、设备与注意任务说明。")}</p></div></li>
+            <li><span>02</span><div><strong>{tr(language, "Questionnaire", "问卷")}</strong><p>{tr(language, "Report your recent sleep and tonight's environment.", "填写最近睡眠和今晚环境情况。")}</p></div></li>
+            <li><span>03</span><div><strong>{tr(language, "Exposure", "屏幕暴露")}</strong><p>{tr(language, "Watch the assigned five-minute color display.", "观看指定的五分钟颜色画面。")}</p></div></li>
+            <li><span>04</span><div><strong>{tr(language, "Karolinska Sleepiness Scale", "卡罗林斯卡困倦量表")}</strong><p>{tr(language, "Answer immediately after the display.", "画面结束后立即作答。")}</p></div></li>
+            <li><span>05</span><div><strong>{tr(language, "Sleep", "睡眠")}</strong><p>{tr(language, "Go to bed at your normal time and sleep normally.", "在平常时间上床并正常睡眠。")}</p></div></li>
+            <li><span>06</span><div><strong>{tr(language, "Next-morning questionnaire", "第二天早晨问卷")}</strong><p>{tr(language, "Return after waking; there is no separate reaction test.", "睡醒后返回；没有独立反应时间测试。")}</p></div></li>
           </ol>
         </section>
 
@@ -2865,8 +3118,8 @@ export default function Home() {
                   {participantProgressStatus === "loaded" && participantProgress
                     ? tr(
                         language,
-                        `${participantProgress.completedConditionIds.length} of 5 conditions completed`,
-                        `已完成 5 项中的 ${participantProgress.completedConditionIds.length} 项`,
+                        `${participantProgress.completedSequencePositions.length} complete · ${4 - participantProgress.completedSequencePositions.length} remaining`,
+                        `${participantProgress.completedSequencePositions.length} 项已完成 · ${4 - participantProgress.completedSequencePositions.length} 项待完成`,
                       )
                     : participantProgressStatus === "failed"
                       ? tr(language, "Progress unavailable — press Begin to retry", "暂时无法读取进度——点击开始可重试")
@@ -3018,11 +3271,11 @@ export default function Home() {
             <p className="admin-mode-note" role="status">{tr(language, "Administrator access selected. A password is required to view remote study data.", "已选择管理员入口，需要密码才能查看远程研究数据。")}</p>
           ) : null}
 
-          {!setupIsAdminMode ? (
+          {setupIsTestMode ? (
             <fieldset>
-              <legend>{tr(language, "Select the condition assigned by the researcher", "选择研究者分配的实验条件")}</legend>
+              <legend>{tr(language, "Test mode only: choose a condition", "仅测试模式：选择一个条件")}</legend>
               <div className="condition-grid">
-                {CONDITIONS.map((condition) => (
+                {ACTIVE_CONDITIONS.map((condition) => (
                   <label key={condition.id} className={`condition-card ${conditionId === condition.id ? "selected" : ""}`}>
                     <input
                       type="radio"
@@ -3031,16 +3284,25 @@ export default function Home() {
                       checked={conditionId === condition.id}
                       onChange={() => setConditionId(condition.id)}
                     />
-                    <span
-                      className={`condition-swatch ${condition.id === "control" ? "control" : ""}`}
-                      style={condition.color ? { backgroundColor: condition.color } : undefined}
-                    />
+                    <span className="condition-swatch" style={{ backgroundColor: condition.color as string }} />
                     <span><strong>{conditionLabel(condition.id, language)}</strong><small>{conditionLuminanceLabel(condition, language)}</small></span>
                     <i aria-hidden="true">{conditionId === condition.id ? "✓" : ""}</i>
                   </label>
                 ))}
               </div>
             </fieldset>
+          ) : !setupIsAdminMode ? (
+            <div className="assigned-condition-banner" role="status">
+              <span>{tr(language, "Assigned automatically after sign-in", "登录后自动分配")}</span>
+              <strong>
+                {participantProgress?.nextConditionId
+                  ? conditionLabel(participantProgress.nextConditionId, language)
+                  : participantProgressStatus === "loaded"
+                    ? tr(language, "All four sessions complete", "四次实验均已完成")
+                    : tr(language, "Fixed order: dim red → dim blue → bright blue → bright red", "固定顺序：暗红 → 暗蓝 → 亮蓝 → 亮红")}
+              </strong>
+              <small>{tr(language, "Participants cannot choose or skip the order.", "受试者不能自行选择或跳过顺序。")}</small>
+            </div>
           ) : null}
 
           {formError ? <p className="form-error" id="setup-error" role="alert">{formError}</p> : null}
@@ -3060,7 +3322,7 @@ export default function Home() {
 
           <div className="session-note">
             <span aria-hidden="true">⌁</span>
-            <p><strong>{tr(language, "Study schedule", "实验安排")}</strong> {tr(language, "The website does not require a washout day. Follow the researcher's assigned order; consecutive-night sessions are allowed.", "网站不强制要求间隔一天。请遵循研究者分配的顺序；允许连续几晚进行不同条件。")}</p>
+            <p><strong>{tr(language, "Study schedule", "实验安排")}</strong> {tr(language, "Fixed order: dim red, dim blue, bright blue, bright red. Consecutive-night sessions are allowed, but do not change your normal bedtime.", "固定顺序为暗红、暗蓝、亮蓝、亮红。可以连续几晚进行，但不要改变平常睡觉时间。")}</p>
           </div>
           <div className="local-data-note">
             <span>
@@ -3068,7 +3330,7 @@ export default function Home() {
                 ? tr(language, "Remote records remain protected until administrator sign-in succeeds.", "管理员登录成功前，远程记录会继续受到保护。")
                 : setupIsTestMode
                   ? tr(language, "The hidden test participant never writes session data to this browser or database.", "内置测试用户不会向浏览器或数据库写入实验数据。")
-                  : tr(language, "This browser remembers your profile. Overnight progress is recoverable for 48 hours; prior versions and answers are never overwritten.", "此浏览器会记住你的档案，整晚进度可在 48 小时内恢复；以前版本和回答不会被覆盖。")}
+                  : tr(language, "Sign in with the same study name and password to restore an unfinished session on another browser or device. Earlier versions and answers are never overwritten.", "在其他浏览器或设备使用相同实验姓名和密码登录，即可恢复未完成的实验；以前版本和回答不会被覆盖。")}
             </span>
           </div>
         </section>
@@ -3076,7 +3338,7 @@ export default function Home() {
 
       <footer>
         <span>Sleep Light Study</span>
-        <span>{tr(language, "Conditions: bright red · dim red · bright blue · dim blue · no-exposure control", "条件：亮红 · 暗红 · 亮蓝 · 暗蓝 · 无光照对照")}</span>
+        <span>{tr(language, "Assigned order: dim red · dim blue · bright blue · bright red", "指定顺序：暗红 · 暗蓝 · 亮蓝 · 亮红")}</span>
       </footer>
     </main>
   );
