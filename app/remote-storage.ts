@@ -1,6 +1,17 @@
 import type { CsvSessionRecord } from "./study-data";
-import type { StudySessionRecordV3 } from "./session-record";
+import type {
+  StudySessionRecord,
+  StudySessionRecordV3,
+  StudySessionRecordV4,
+} from "./session-record";
 import { isStudySessionDraftV3, isStudySessionRecordV3 } from "./session-validation.ts";
+import { isStudySessionDraftV4, isStudySessionRecordV4 } from "./session-validation-v4.ts";
+import {
+  V4_CONDITION_ORDER,
+  isV4ConditionId,
+  type SequencePosition,
+  type V4ConditionId,
+} from "./protocol-v4.ts";
 import {
   createParticipantPasswordProof,
   createRecoveryProof,
@@ -48,7 +59,7 @@ export type LegacyStoredSessionRecord = CsvSessionRecord & {
   }>;
 };
 
-export type StoredSessionRecord = LegacyStoredSessionRecord | StudySessionRecordV3;
+export type StoredSessionRecord = LegacyStoredSessionRecord | StudySessionRecordV3 | StudySessionRecordV4;
 
 export type RemoteStudySession = {
   record: StoredSessionRecord;
@@ -76,6 +87,11 @@ export type ParticipantProgress = {
   completedSessions: CompletedProfileSession[];
   completedConditionIds: StudySessionRecordV3["conditionId"][];
   remainingConditionIds: StudySessionRecordV3["conditionId"][];
+  activeProtocolVersion: "overnight-v2";
+  sequenceVersion: "fixed-four-v1";
+  completedSequencePositions: SequencePosition[];
+  nextSequencePosition: SequencePosition | null;
+  nextConditionId: V4ConditionId | null;
 };
 
 export type ParticipantFeedbackType = "feedback" | "question";
@@ -88,6 +104,9 @@ export type ParticipantFeedbackReceipt = {
 export type AdminParticipantProfile = ParticipantProfile & {
   completedSessionCount: number;
   completedConditionIds: StudySessionRecordV3["conditionId"][];
+  completedSequencePositions: SequencePosition[];
+  nextSequencePosition: SequencePosition | null;
+  nextConditionId: V4ConditionId | null;
   feedbackCount: number;
 };
 
@@ -344,7 +363,7 @@ function isStoredSessionRecordV2(value: unknown): value is LegacyStoredSessionRe
 }
 
 export function isStoredSessionRecord(value: unknown): value is StoredSessionRecord {
-  return isStoredSessionRecordV2(value) || isStudySessionRecordV3(value);
+  return isStoredSessionRecordV2(value) || isStudySessionRecordV3(value) || isStudySessionRecordV4(value);
 }
 
 function apiHeaders(accessToken?: string) {
@@ -560,7 +579,24 @@ export async function fetchParticipantProgress(
     !Array.isArray(value.completedConditionIds) ||
     !value.completedConditionIds.every(isProfileCondition) ||
     !Array.isArray(value.remainingConditionIds) ||
-    !value.remainingConditionIds.every(isProfileCondition)
+    !value.remainingConditionIds.every(isProfileCondition) ||
+    value.activeProtocolVersion !== "overnight-v2" ||
+    value.sequenceVersion !== "fixed-four-v1" ||
+    !Array.isArray(value.completedSequencePositions) ||
+    !value.completedSequencePositions.every((position) =>
+      Number.isInteger(position) && Number(position) >= 1 && Number(position) <= 4
+    ) ||
+    new Set(value.completedSequencePositions).size !== value.completedSequencePositions.length ||
+    !(value.nextSequencePosition === null ||
+      (Number.isInteger(value.nextSequencePosition) &&
+        Number(value.nextSequencePosition) >= 1 &&
+        Number(value.nextSequencePosition) <= 4)) ||
+    !(value.nextConditionId === null || isV4ConditionId(value.nextConditionId)) ||
+    ((value.nextSequencePosition === null) !== (value.nextConditionId === null)) ||
+    (
+      value.nextSequencePosition !== null &&
+      value.nextConditionId !== V4_CONDITION_ORDER[Number(value.nextSequencePosition) - 1]
+    )
   ) {
     throw new Error("The participant progress response was not valid.");
   }
@@ -569,11 +605,11 @@ export async function fetchParticipantProgress(
 
 export async function uploadProfileStudySession(
   profile: LocalParticipantProfile,
-  record: StudySessionRecordV3,
+  record: StudySessionRecordV3 | StudySessionRecordV4,
   options: { keepalive?: boolean } = {},
 ) {
   if (
-    !isStudySessionRecordV3(record) ||
+    !(isStudySessionRecordV3(record) || isStudySessionRecordV4(record)) ||
     (record.status !== "completed" && record.status !== "terminated") ||
     !record.endedAtIso ||
     record.participantId !== profile.displayName ||
@@ -705,11 +741,11 @@ function assertResumeToken(resumeToken: string) {
 
 export async function saveStudyDraft(
   resumeToken: string,
-  record: StudySessionRecordV3,
+  record: StudySessionRecord,
   options: { keepalive?: boolean } = {},
 ) {
   assertResumeToken(resumeToken);
-  if (!isStudySessionDraftV3(record)) {
+  if (!(isStudySessionDraftV3(record) || isStudySessionDraftV4(record))) {
     throw new Error("The overnight study draft is not valid.");
   }
   const body = JSON.stringify({ resume_token: resumeToken, draft_payload: record });
@@ -742,10 +778,70 @@ export async function loadStudyDraft(resumeToken: string) {
   }
   const payload: unknown = await response.json();
   if (payload === null) return null;
-  if (!isStudySessionDraftV3(payload)) {
+  if (!(isStudySessionDraftV3(payload) || isStudySessionDraftV4(payload))) {
     throw new Error("The stored overnight draft was not valid.");
   }
   return payload;
+}
+
+export async function saveParticipantStudyDraft(
+  profile: LocalParticipantProfile,
+  record: StudySessionRecordV4,
+  options: { keepalive?: boolean } = {},
+) {
+  if (
+    !isStudySessionDraftV4(record) ||
+    record.participantProfileId !== profile.profileId ||
+    record.participantId !== profile.displayName
+  ) {
+    throw new Error("The participant study draft is not valid.");
+  }
+  const authentication = await profileRpcBody(profile);
+  const body = JSON.stringify({ ...authentication, draft_payload: record });
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/save_participant_study_draft`, {
+    method: "POST",
+    headers: { ...apiHeaders(), "Content-Type": "application/json" },
+    body,
+    keepalive: Boolean(options.keepalive) && new TextEncoder().encode(body).byteLength <= 60000,
+  });
+  if (!response.ok) {
+    throw new Error(await responseError(response, "The participant draft could not be saved."));
+  }
+}
+
+export async function loadParticipantStudyDraft(profile: LocalParticipantProfile) {
+  const authentication = await profileRpcBody(profile);
+  const response = await postAnonymousRpc(
+    "load_participant_study_draft",
+    authentication,
+    "The participant draft could not be loaded.",
+  );
+  const payload: unknown = await response.json();
+  if (payload === null) return null;
+  if (!isStudySessionDraftV4(payload)) {
+    throw new Error("The stored participant draft was not valid.");
+  }
+  if (
+    payload.participantProfileId !== profile.profileId ||
+    payload.participantId !== profile.displayName
+  ) {
+    throw new Error("The stored participant draft did not belong to this account.");
+  }
+  return payload;
+}
+
+export async function deleteParticipantStudyDraft(
+  profile: LocalParticipantProfile,
+  sessionId: string,
+) {
+  if (!UUID_PATTERN.test(sessionId)) throw new Error("The draft session ID is not valid.");
+  const authentication = await profileRpcBody(profile);
+  const response = await postAnonymousRpc(
+    "delete_participant_study_draft",
+    { ...authentication, session_id: sessionId },
+    "The participant draft could not be removed.",
+  );
+  return response.json() as Promise<boolean>;
 }
 
 export async function deleteStudyDraft(resumeToken: string) {
@@ -884,7 +980,22 @@ export async function fetchAdminParticipantProfiles(
       !Number.isInteger(fields.feedbackCount) ||
       (fields.feedbackCount as number) < 0 ||
       !Array.isArray(fields.completedConditionIds) ||
-      !fields.completedConditionIds.every(isProfileCondition)
+      !fields.completedConditionIds.every(isProfileCondition) ||
+      !Array.isArray(fields.completedSequencePositions) ||
+      !fields.completedSequencePositions.every((position) =>
+        Number.isInteger(position) && Number(position) >= 1 && Number(position) <= 4
+      ) ||
+      new Set(fields.completedSequencePositions).size !== fields.completedSequencePositions.length ||
+      !(fields.nextSequencePosition === null ||
+        (Number.isInteger(fields.nextSequencePosition) &&
+          Number(fields.nextSequencePosition) >= 1 &&
+          Number(fields.nextSequencePosition) <= 4)) ||
+      !(fields.nextConditionId === null || isV4ConditionId(fields.nextConditionId)) ||
+      ((fields.nextSequencePosition === null) !== (fields.nextConditionId === null)) ||
+      (
+        fields.nextSequencePosition !== null &&
+        fields.nextConditionId !== V4_CONDITION_ORDER[Number(fields.nextSequencePosition) - 1]
+      )
     ) {
       throw new Error("The participant profile list was not valid.");
     }
