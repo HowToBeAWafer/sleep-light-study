@@ -76,12 +76,22 @@ export type CompletedV3Session = Pick<
   | "preSurvey"
 >;
 
+export type CompletedSurveySession = {
+  schemaVersion: 3 | 4;
+  sessionId: string;
+  participantId: string;
+  conditionId: ConditionId;
+  status: "completed";
+  exposureStatus: string;
+  preSurvey: PreStudySurvey;
+};
+
 export type ParticipantHistoryGroup = {
   /** First encountered spelling, retained for display. */
   participantName: string;
   /** Case-insensitive NFKC key suitable for joining a participant profile. */
   normalizedParticipantName: string;
-  sessions: CompletedV3Session[];
+  sessions: CompletedSurveySession[];
   consistencyReview: ConsistencyReview;
   conditionHistory: ConditionHistorySummary;
 };
@@ -125,12 +135,30 @@ export function isCompletedV3Session(value: unknown): value is CompletedV3Sessio
   );
 }
 
+export function isCompletedSurveySession(value: unknown): value is CompletedSurveySession {
+  if (!isObject(value) || !isObject(value.preSurvey)) return false;
+  return (
+    (value.schemaVersion === 3 || value.schemaVersion === 4) &&
+    value.status === "completed" &&
+    typeof value.sessionId === "string" &&
+    typeof value.participantId === "string" &&
+    value.participantId.trim().length > 0 &&
+    typeof value.conditionId === "string" &&
+    CONDITION_SET.has(value.conditionId) &&
+    typeof value.exposureStatus === "string"
+  );
+}
+
 export function normalizeParticipantName(value: string) {
   return value.normalize("NFKC").trim().replace(/\s+/gu, " ").toLowerCase();
 }
 
 function completedV3Sessions(records: readonly unknown[]) {
   return records.filter(isCompletedV3Session);
+}
+
+function completedSurveySessions(records: readonly unknown[]) {
+  return records.filter(isCompletedSurveySession);
 }
 
 function parseTimeOfDay(value: unknown) {
@@ -180,7 +208,7 @@ function makeReason(key: ConsistencyReviewReasonKey): ConsistencyReviewReason {
 }
 
 export function reviewParticipantConsistency(records: readonly unknown[]): ConsistencyReview {
-  const sessions = completedV3Sessions(records);
+  const sessions = completedSurveySessions(records);
   const surveys = sessions.map((session) => session.preSurvey);
   const sleepTimeSpreadMinutes = circularTimeSpreadMinutes(
     surveys.map((survey) => survey.previousNightSleepTime),
@@ -287,8 +315,8 @@ export function summarizeConditionHistory(records: readonly unknown[]): Conditio
 }
 
 export function groupParticipantHistories(records: readonly unknown[]): ParticipantHistoryGroup[] {
-  const groups = new Map<string, { participantName: string; sessions: CompletedV3Session[] }>();
-  for (const session of completedV3Sessions(records)) {
+  const groups = new Map<string, { participantName: string; sessions: CompletedSurveySession[] }>();
+  for (const session of completedSurveySessions(records)) {
     const normalizedParticipantName = normalizeParticipantName(session.participantId);
     const group = groups.get(normalizedParticipantName);
     if (group) {
