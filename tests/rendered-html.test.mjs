@@ -246,17 +246,21 @@ test("server-renders the Sleep Light Study setup page", async () => {
 
   const html = await response.text();
   assert.match(html, /<title>Sleep Light Study \| 睡眠光照研究<\/title>/i);
-  assert.match(html, /Complete tonight/);
-  assert.match(html, /Return after waking/);
+  assert.match(html, /short pre-sleep screen-color exposure relates to immediate and next-morning alertness/);
+  assert.match(html, /Do not change your normal bedtime/);
+  assert.match(html, /Karolinska Sleepiness Scale/);
+  assert.match(html, /Answer immediately after the display/);
+  assert.match(html, /Next-morning questionnaire/);
+  assert.match(html, /there is no separate reaction test/);
   assert.match(html, /Study name \(real name or nickname\)/);
   assert.match(html, /Create account/);
   assert.match(html, /Choose a password/);
   assert.doesNotMatch(html, /email reminder after waking|提醒邮箱/i);
-  assert.match(html, /Bright red/);
-  assert.match(html, /Dim red/);
-  assert.match(html, /Bright blue/);
-  assert.match(html, /Dim blue/);
-  assert.match(html, /Control — normal sleep/);
+  assert.match(html, /Fixed order: dim red → dim blue → bright blue → bright red/);
+  assert.match(html, /Assigned automatically after sign-in/);
+  assert.match(html, /Participants cannot choose or skip the order/);
+  assert.doesNotMatch(html, /Control — normal sleep/);
+  assert.doesNotMatch(html, /name="light-condition"/);
   assert.match(html, /Read tutorial and begin/);
   assert.match(html, /English/);
   assert.match(html, /中文/);
@@ -278,12 +282,19 @@ test("includes attention, pause, termination, and logging controls", async () =>
   assert.match(studyData, /"session_summary"/);
   assert.match(page, /finishExposureRef\.current\("terminated"\)/);
   assert.match(page, /className="session-countdown"/);
-  assert.match(page, /schemaVersion: 3/);
+  assert.match(page, /schemaVersion: 4/);
   assert.match(page, /export function makeTrialPlan\(count = 4\)/);
   assert.match(page, /plannedOnsetMs \+= randomBetween\(50000, 70000\)/);
-  assert.match(page, /id: "control"/);
+  assert.match(page, /const ACTIVE_CONDITIONS = CONDITIONS\.filter/);
+  assert.match(page, /V4_CONDITION_ORDER as readonly string\[\]/);
   assert.match(page, /sleepStartedAtIso/);
-  assert.match(page, /ReactionTest/);
+  assert.match(page, /PostExposureSurveyForm/);
+  assert.match(page, /MorningSurveyForm/);
+  assert.match(page, /setPhase\("post-exposure-survey"\)/);
+  assert.match(
+    page,
+    /phase === "reaction-test" && overnightRecord && overnightRecord\.schemaVersion === 3/,
+  );
   assert.match(page, /now - startedAtPerformanceRef\.current - totalPausedMsRef\.current/);
   assert.match(page, /typeof document\.documentElement\.requestFullscreen !== "function"/);
 });
@@ -357,11 +368,11 @@ test("supports bilingual tutorials, password accounts, isolated practice, append
   assert.match(page, /STUDY_BUILD_VERSION/);
   assert.match(page, /SessionFeedback/);
   assert.match(page, /admin-review-flag/);
-  assert.match(tutorial, /Keep these as similar as practical/);
+  assert.match(tutorial, /Keep the device and display consistent/);
   assert.match(tutorial, /温度/);
   assert.match(tutorial, /condition-progress-grid/);
   assert.match(tutorial, /<strong>黑色十字<\/strong>/);
-  assert.match(tutorial, /The practice is not saved and does not count toward the study results/);
+  assert.match(tutorial, /Practice is not saved and does not count toward the results/);
   assert.match(practice, /Practice — not recorded/);
   assert.match(practice, /background: "#202329"/);
   assert.match(practice, /stage !== "prompt-end"/);
@@ -397,28 +408,34 @@ test("admin portal expands organized, safe, detailed session results", async () 
   assert.match(page, /aria-controls=\{detailsId\}/);
   assert.match(page, /<AdminSessionDetails/);
   assert.match(page, /profileById/);
-  assert.match(page, /v3\?\.participantProfileId/);
+  assert.match(page, /profileRecord\?\.participantProfileId/);
   assert.match(page, /profileMatch/);
   assert.match(
     page,
-    /const STUDY_BUILD_VERSION = "2026-07-26-password-practice-admin-results-v1"/,
+    /const STUDY_BUILD_VERSION = "2026-07-31-fixed-four-immediate-alertness-v1"/,
   );
 
   for (const section of [
     "1. Record and profile",
     "2. Condition and exposure",
     "3. Timeline and durations",
+    "4. Before-exposure questionnaire",
+    "5. Immediate post-exposure measure",
+    "6. Next-morning questionnaire",
+    "7. Reaction time source and devices",
     "4. Pre-sleep questionnaire",
     "5. After waking and reaction test",
     "6. Device records",
-    "7. Attention-task results",
-    "8. Extra clicks, pauses, and display events",
-    "9. Automated consistency review",
-    "10. Feedback and questions",
-    "11. Raw validated session payload",
+    "Attention-task results",
+    "Extra clicks, pauses, and display events",
+    "Automated consistency review",
+    "Feedback and questions",
+    "Raw validated session payload",
   ]) {
     assert.match(details, new RegExp(section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
+  assert.match(details, /Protocol v4 intentionally has no separate reaction-time test/);
+  assert.match(details, /Reaction time is derived from hit trials during the five-minute screen exposure/);
 
   assert.match(details, /pageSize = 50/);
   assert.match(details, /items\.slice\(start, start \+ pageSize\)/);
@@ -916,9 +933,16 @@ test("remote storage keeps admin reads behind authentication and RLS", async () 
     readFile(new URL("../supabase/setup.sql", import.meta.url), "utf8"),
   ]);
 
-  const adminBranch = page.indexOf("if (isAdminParticipantId(cleanParticipantId))");
-  const participantValidation = page.indexOf("if (!cleanParticipantId || !conditionId)");
-  assert.ok(adminBranch >= 0 && participantValidation > adminBranch);
+  const startSession = page.indexOf("const startSession = async");
+  const adminBranch = page.indexOf(
+    "if (isAdminParticipantId(cleanParticipantId))",
+    startSession,
+  );
+  const participantValidation = page.indexOf(
+    "if (!cleanParticipantId || (isTestParticipantId(cleanParticipantId) && !conditionId))",
+    adminBranch,
+  );
+  assert.ok(startSession >= 0 && adminBranch > startSession && participantValidation > adminBranch);
   assert.doesNotMatch(page, /exportSavedSessions|savedSessionCount/);
   assert.match(page, /uploadStudySession\(record/);
   assert.match(page, /maxLength=\{80\}/);
