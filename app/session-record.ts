@@ -5,6 +5,12 @@ import type {
   PreStudySurvey,
   ReactionTestRecord,
 } from "./protocol-v3";
+import type {
+  MorningStudySurvey,
+  PostExposureSurvey,
+  SequencePosition,
+  V4ConditionId,
+} from "./protocol-v4";
 
 export type SessionStatus = "active" | "completed" | "terminated";
 export type ExposureStatus =
@@ -105,8 +111,53 @@ export type StudySessionRecordV3 = {
   environmentEvents: EnvironmentEvent[];
 };
 
+export type StudySessionRecordV4 = {
+  schemaVersion: 4;
+  protocolVersion: "overnight-v2";
+  sequenceVersion: "fixed-four-v1";
+  sequencePosition: SequencePosition;
+  attentionProtocolVersion: "sparse-4-50-70-v1";
+  sessionId: string;
+  participantId: string;
+  participantProfileId: string;
+  studyBuildVersion: string;
+  conditionId: V4ConditionId;
+  conditionName: string;
+  stimulusColorHex: string;
+  stimulusColorRgb: string;
+  plannedDurationMs: number;
+  plannedEndAtIso: string | null;
+  actualDurationMs: number;
+  wallClockDurationMs: number;
+  totalPausedDurationMs: number;
+  crossVisibleMs: number;
+  startedAtIso: string;
+  stimulusStartedAtIso: string | null;
+  stimulusEndedAtIso: string | null;
+  sleepStartedAtIso: string | null;
+  morningReturnedAtIso: string | null;
+  assessmentCompletedAtIso: string | null;
+  endedAtIso: string | null;
+  status: SessionStatus;
+  exposureStatus: Exclude<ExposureStatus, "not-applicable">;
+  terminationReason: "end_sequence" | "touch_end" | "page_reload" | null;
+  fullscreenAtStart: boolean;
+  fullscreenRequestFailed: boolean;
+  deviceInfo: SessionDeviceInfo;
+  preSurvey: PreStudySurvey;
+  postExposureSurvey: PostExposureSurvey | null;
+  morningSurvey: MorningStudySurvey | null;
+  trialPlan: PlannedTrial[];
+  trials: TrialRecord[];
+  falseClicks: FalseClickRecord[];
+  pauses: PauseRecord[];
+  environmentEvents: EnvironmentEvent[];
+};
+
+export type StudySessionRecord = StudySessionRecordV3 | StudySessionRecordV4;
+
 export type LocalOvernightDraft = {
-  storageVersion: 1;
+  storageVersion: 1 | 2;
   resumeToken: string;
-  record: StudySessionRecordV3;
+  record: StudySessionRecord;
 };
