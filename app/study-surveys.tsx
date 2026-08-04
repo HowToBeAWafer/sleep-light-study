@@ -67,28 +67,28 @@ const PRE_SURVEY_COPY = {
     privacy: "Responses are stored with your study name. Do not enter medication or supplement names.",
   },
   zh: {
-    eyebrow: "今晚的实验开始前",
+    eyebrow: "本次实验开始前",
     title: "睡眠与环境问卷",
-    introduction: "请根据你最近一次睡眠作答；问题明确提到“今晚”时，请根据今晚的情况作答。",
-    deviceQuestion: "你正在使用哪一类设备参加本研究？",
-    detectedDevice: "系统自动识别为：{device}。如果不正确，请修改。",
-    previousSleepTime: "你最近一次睡眠大约几点开始尝试入睡？",
-    sleepiness: "在刚刚过去的五分钟内，你感觉有多困？",
-    screenUse: "本次实验前的两小时内，你是否使用过带屏幕的电子设备？",
-    screenMinutes: "大约使用了多少分钟？",
-    sleepLight: "今晚睡觉时你是否打算开灯？",
-    sleepLightColor: "睡眠环境中的灯是什么颜色？",
-    sleepTemperature: "你今晚的睡眠环境体感温度如何？",
-    sleepAid: "今晚你是否会服用任何助眠药物或保健品？",
-    restedness: "最近一次睡醒时，你感觉休息得有多充分或精神恢复得如何？",
-    sleepQuality: "你如何评价最近一次睡眠的质量？",
-    caffeine: "过去八小时内，你是否摄入过咖啡因？",
-    music: "今晚入睡时你是否打算播放音乐？",
-    noise: "今晚的睡眠环境通常有多少噪音？",
-    exercise: "过去12小时内，你是否进行过剧烈运动？",
+    introduction: "请根据最近一次睡眠情况作答；若题目提及“今晚”，请按今晚的实际情况回答。",
+    deviceQuestion: "本次实验使用的设备类型是？",
+    detectedDevice: "系统识别的设备类型为：{device}。如有误，请修改。",
+    previousSleepTime: "最近一次睡眠中，你大约从几点开始尝试入睡？",
+    sleepiness: "过去五分钟内，你的困倦程度如何？",
+    screenUse: "本次实验前两小时内，你是否使用过带屏幕的电子设备？",
+    screenMinutes: "累计大约使用了多少分钟？",
+    sleepLight: "你今晚睡觉时是否计划开灯？",
+    sleepLightColor: "计划开启的灯光主要是什么颜色？",
+    sleepTemperature: "你预计今晚睡眠环境的体感温度如何？",
+    sleepAid: "你今晚是否计划服用助眠药物或补充剂？",
+    restedness: "最近一次醒来时，你觉得精力恢复得如何？",
+    sleepQuality: "你如何评价最近一次睡眠的整体质量？",
+    caffeine: "过去八小时内，你是否摄入咖啡因？",
+    music: "你今晚入睡前是否计划播放音乐？",
+    noise: "你预计今晚睡眠环境的噪声程度如何？",
+    exercise: "过去十二小时内，你是否进行过剧烈运动？",
     incomplete: "请回答所有问题后再继续。",
-    continue: "继续今晚的实验条件",
-    privacy: "回答会与你的实验名称关联保存。请不要填写药物或保健品的具体名称。",
+    continue: "继续进入本次实验",
+    privacy: "问卷回答将与研究用名关联保存。请勿填写具体药物或补充剂名称。",
   },
 } as const;
 
@@ -101,11 +101,11 @@ const POST_EXPOSURE_COPY = {
     continue: "Save and continue to sleep instructions",
   },
   zh: {
-    eyebrow: "画面结束后立即填写",
-    title: "你现在有多困？",
-    introduction: "请现在作答；在填写前不要放下设备或开始其他活动。",
-    sleepiness: "在刚刚过去的五分钟内，你感觉有多困？",
-    continue: "保存并继续查看睡眠说明",
+    eyebrow: "观看结束后立即填写",
+    title: "你目前的困倦程度如何？",
+    introduction: "请在放下设备或进行其他活动前立即作答。",
+    sleepiness: "过去五分钟内，你的困倦程度如何？",
+    continue: "保存并查看睡眠说明",
   },
 } as const;
 
@@ -128,20 +128,20 @@ const MORNING_SURVEY_COPY = {
     incomplete: "Please answer every required question before continuing.",
   },
   zh: {
-    eyebrow: "第二天早晨问卷",
-    title: "请告诉我们昨晚的睡眠情况。",
-    introduction: "请在按照平常方式睡醒后填写。本研究不再设置独立的反应时间测试。",
-    deviceQuestion: "你现在使用的是哪一类设备？",
-    detectedDevice: "系统自动识别为：{device}。如果不正确，请修改。",
-    attemptedSleepTime: "你昨晚大约几点开始尝试入睡？",
-    wakeTime: "你今天大约几点起床？",
-    awakenings: "你记得夜间醒来了几次？",
-    sleepQuality: "你如何评价昨晚的睡眠质量？",
-    restedness: "醒来时，你感觉休息得有多充分或精神恢复得如何？",
-    alertness: "你现在感觉有多清醒？",
-    unusualFactors: "昨晚是否有可能影响睡眠的异常情况？",
-    unusualFactorsNote: "请简要说明异常情况，不要填写可识别身份或具体医疗信息。",
-    continue: "完成本次实验",
+    eyebrow: "次晨问卷",
+    title: "请填写昨晚的睡眠情况。",
+    introduction: "请在按平常作息醒来后填写。本阶段仅需完成问卷，无需另做反应时间测试。",
+    deviceQuestion: "你目前使用的设备类型是？",
+    detectedDevice: "系统识别的设备类型为：{device}。如有误，请修改。",
+    attemptedSleepTime: "昨晚你大约从几点开始尝试入睡？",
+    wakeTime: "今天早上你大约几点醒来并开始一天的活动？",
+    awakenings: "你记得昨夜睡眠期间醒来过几次？",
+    sleepQuality: "你如何评价昨晚的整体睡眠质量？",
+    restedness: "醒来时，你觉得精力恢复得如何？",
+    alertness: "你目前的清醒程度如何？",
+    unusualFactors: "昨晚是否出现任何可能影响睡眠的特殊情况？",
+    unusualFactorsNote: "请简要说明特殊情况；请勿填写可识别身份的信息或具体医疗信息。",
+    continue: "提交问卷并完成本次实验",
     incomplete: "请回答所有必答问题后再继续。",
   },
 } as const;
@@ -181,7 +181,7 @@ function KssField({
       <legend>{legend}</legend>
       <p className="question-help">
         {language === "zh"
-          ? "卡罗林斯卡困倦量表，标准 1–9 分完整文字标注版。"
+          ? "以下为卡罗林斯卡困倦量表（Karolinska Sleepiness Scale，1–9 分）的完整选项，请选择最符合过去五分钟状态的一项。"
           : "Karolinska Sleepiness Scale, standard 1–9 fully labelled version."}
       </p>
       <div className="kss-options">
@@ -405,7 +405,7 @@ export function PreStudySurveyForm({
             { value: "comfortable", label: "舒适" },
             { value: "slightly-warm", label: "稍热" },
             { value: "hot", label: "热" },
-            { value: "prefer-not-to-answer", label: "不愿回答" },
+            { value: "prefer-not-to-answer", label: "选择不作答" },
           ] : [
             { value: "cold", label: "Cold" },
             { value: "slightly-cold", label: "Slightly cold" },
@@ -432,11 +432,11 @@ export function PreStudySurveyForm({
           value={answers.morningRestedness}
           onChange={(value) => update("morningRestedness", Number(value) as FivePointScore)}
           options={language === "zh" ? [
-            { value: "1", label: "1 — 完全没有休息好" },
-            { value: "2", label: "2 — 稍微休息了一些" },
-            { value: "3", label: "3 — 休息程度一般" },
-            { value: "4", label: "4 — 休息得很好" },
-            { value: "5", label: "5 — 休息得非常充分" },
+            { value: "1", label: "1 — 完全没有恢复" },
+            { value: "2", label: "2 — 略有恢复" },
+            { value: "3", label: "3 — 恢复程度一般" },
+            { value: "4", label: "4 — 恢复良好" },
+            { value: "5", label: "5 — 恢复得非常充分" },
           ] : [
             { value: "1", label: "1 — Not at all rested" },
             { value: "2", label: "2 — Slightly rested" },
@@ -490,11 +490,11 @@ export function PreStudySurveyForm({
           value={answers.sleepNoiseLevel}
           onChange={(value) => update("sleepNoiseLevel", value as SleepNoiseLevel)}
           options={language === "zh" ? [
-            { value: "none", label: "无噪音／安静" },
+            { value: "none", label: "无噪声／安静" },
             { value: "low", label: "较低" },
             { value: "moderate", label: "中等" },
             { value: "high", label: "较高" },
-            { value: "prefer-not-to-answer", label: "不愿回答" },
+            { value: "prefer-not-to-answer", label: "选择不作答" },
           ] : [
             { value: "none", label: "None / quiet" },
             { value: "low", label: "Low" },
@@ -659,7 +659,7 @@ export function MorningSurveyForm({
           label={copy.restedness}
           value={restedness}
           onChange={(value) => setRestedness(Number(value) as FivePointScore)}
-          options={fivePointOptions(language === "zh" ? ["完全没有休息好", "稍微休息了一些", "一般", "休息得很好", "休息得非常充分"] : ["Not at all rested", "Slightly rested", "Moderately rested", "Well rested", "Very well rested"])}
+          options={fivePointOptions(language === "zh" ? ["完全没有恢复", "略有恢复", "恢复程度一般", "恢复良好", "恢复得非常充分"] : ["Not at all rested", "Slightly rested", "Moderately rested", "Well rested", "Very well rested"])}
           language={language}
         />
         <SelectQuestion
@@ -667,7 +667,7 @@ export function MorningSurveyForm({
           label={copy.alertness}
           value={alertness}
           onChange={(value) => setAlertness(Number(value) as FivePointScore)}
-          options={fivePointOptions(language === "zh" ? ["非常不清醒", "不太清醒", "一般", "比较清醒", "非常清醒"] : ["Very unalert", "Slightly unalert", "Moderately alert", "Alert", "Very alert"])}
+          options={fivePointOptions(language === "zh" ? ["极不清醒", "不太清醒", "清醒程度一般", "较为清醒", "非常清醒"] : ["Very unalert", "Slightly unalert", "Moderately alert", "Alert", "Very alert"])}
           language={language}
         />
         <SelectQuestion
@@ -726,14 +726,14 @@ export function PostStudySurveyForm({
         }}
       >
         <header className="survey-header">
-          <p className="eyebrow">{language === "zh" ? "旧版 v3 睡醒后步骤" : "Legacy v3 after-waking step"}</p>
-          <h1>{language === "zh" ? "你现在有多困？" : "How sleepy are you now?"}</h1>
-          <p>{language === "zh" ? "这是部署前已开始的旧版实验恢复流程。" : "This restores a Protocol v3 session started before the update."}</p>
+          <p className="eyebrow">{language === "zh" ? "旧版 v3 醒后步骤" : "Legacy v3 after-waking step"}</p>
+          <h1>{language === "zh" ? "你目前的困倦程度如何？" : "How sleepy are you now?"}</h1>
+          <p>{language === "zh" ? "此页面用于恢复更新前已开始的旧版实验。" : "This restores a Protocol v3 session started before the update."}</p>
         </header>
         <SelectQuestion
           id="legacy-post-device-category"
-          label={language === "zh" ? "你现在使用哪一类设备？" : "What type of device are you using now?"}
-          help={(language === "zh" ? "系统识别为：{device}。" : "Automatically detected: {device}.").replace("{device}", deviceLabel(detectedDevice.detectedCategory, language))}
+          label={language === "zh" ? "你目前使用的设备类型是？" : "What type of device are you using now?"}
+          help={(language === "zh" ? "系统识别的设备类型为：{device}。" : "Automatically detected: {device}.").replace("{device}", deviceLabel(detectedDevice.detectedCategory, language))}
           value={deviceCategory}
           onChange={(value) => setDeviceCategory(value as DeviceCategory)}
           options={deviceOptions(language)}
@@ -742,12 +742,12 @@ export function PostStudySurveyForm({
         <KssField
           value={sleepinessKss}
           onChange={setSleepinessKss}
-          legend={language === "zh" ? "在刚刚过去的五分钟内，你感觉有多困？" : "How sleepy have you felt during the immediately preceding five minutes?"}
+          legend={language === "zh" ? "过去五分钟内，你的困倦程度如何？" : "How sleepy have you felt during the immediately preceding five minutes?"}
           language={language}
         />
         {saveError ? <p className="form-error" role="alert">{saveError}</p> : null}
         <button className="primary-button survey-submit" type="submit" disabled={sleepinessKss === null}>
-          {language === "zh" ? "继续旧版反应步骤" : "Continue the legacy reaction step"}
+          {language === "zh" ? "继续旧版反应测试" : "Continue the legacy reaction step"}
         </button>
       </form>
     </main>
