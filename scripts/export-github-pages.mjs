@@ -46,7 +46,8 @@ const html = (await response.text())
 if (
   !html.includes("Read tutorial and begin") ||
   !html.includes("A study of how short pre-sleep screen-color exposure relates to immediate and next-morning alertness.") ||
-  !html.includes("Assigned automatically after sign-in")
+  !html.includes("Four-session study") ||
+  !html.includes("The condition for each session is assigned automatically")
 ) {
   throw new Error("Static render is missing the participant start control.");
 }
@@ -74,7 +75,8 @@ if (
   !javascript.includes("I have woken up") ||
   !javascript.includes("Immediately after the display") ||
   !javascript.includes("Next-morning questionnaire") ||
-  !javascript.includes("Fixed order: dim red") ||
+  !javascript.includes("Current assignment and progress") ||
+  !javascript.includes("The condition for each session is assigned automatically") ||
   !javascript.includes("Do not participate if you have a history of photosensitive seizures") ||
   !javascript.includes("Time watched") ||
   !javascript.includes("Your name must be unique") ||
@@ -84,6 +86,21 @@ if (
   !javascript.includes("load_participant_study_draft")
 ) {
   throw new Error("Static client bundle is missing a required study control or storage integration.");
+}
+
+const publicBuild = `${html}\n${javascript}`;
+const disclosedConditionOrders = [
+  "Fixed order: dim red → dim blue → bright blue → bright red",
+  "Fixed order: dim red, dim blue, bright blue, bright red",
+  "Assigned order: dim red · dim blue · bright blue · bright red",
+  "固定顺序：暗红 → 暗蓝 → 亮蓝 → 亮红",
+  "固定顺序为暗红、暗蓝、亮蓝、亮红",
+  "指定顺序：暗红 · 暗蓝 · 亮蓝 · 亮红",
+];
+for (const disclosedOrder of disclosedConditionOrders) {
+  if (publicBuild.includes(disclosedOrder)) {
+    throw new Error(`Static build discloses the participant condition order: ${disclosedOrder}`);
+  }
 }
 
 await Promise.all([
