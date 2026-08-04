@@ -139,7 +139,7 @@ function makeV4Session(sequencePosition = 1) {
     sessionId: makeUuid(1000 + sequencePosition),
     participantId: "Pilot-V4",
     participantProfileId: makeUuid(2000),
-    studyBuildVersion: "2026-07-31-fixed-four-immediate-alertness-v1",
+    studyBuildVersion: "2026-08-04-professional-zh-blinded-order-v1",
     conditionId,
     conditionName: condition.name,
     stimulusColorHex: condition.hex,
@@ -505,7 +505,7 @@ test("protocol v3 remains valid and retains standalone reaction rows", () => {
   );
 });
 
-test("participant-facing protocol v4 copy exposes the required order and phase order", async () => {
+test("participant-facing protocol v4 copy hides the condition order and preserves phase order", async () => {
   const [page, tutorial, surveys, recordTypes] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/study-tutorial.tsx", import.meta.url), "utf8"),
@@ -513,9 +513,9 @@ test("participant-facing protocol v4 copy exposes the required order and phase o
     readFile(new URL("../app/session-record.ts", import.meta.url), "utf8"),
   ]);
 
-  assert.match(page, /Fixed order: dim red → dim blue → bright blue → bright red/);
-  assert.match(page, /Assigned automatically after sign-in/);
-  assert.match(page, /Participants cannot choose or skip the order/);
+  assert.match(page, /Four-session study/);
+  assert.match(page, /The condition for each session is assigned automatically/);
+  assert.match(page, /no selection is required/);
   assert.match(page, /Test mode only: choose a condition/);
   assert.match(page, /"post-exposure-survey"/);
   assert.match(page, /setPhase\("post-exposure-survey"\)/);
@@ -528,9 +528,24 @@ test("participant-facing protocol v4 copy exposes the required order and phase o
 
   assert.match(tutorial, /Post-exposure sleepiness measure/);
   assert.match(tutorial, /Reaction time during this display is the study reaction-time measure/);
+  assert.match(tutorial, /Current assignment and progress/);
+  assert.match(tutorial, /The condition for each session is assigned automatically/);
+  assert.doesNotMatch(tutorial, /condition-progress-grid/);
   assert.match(surveys, /Immediately after the display/);
   assert.match(surveys, /Next-morning questionnaire/);
   assert.match(surveys, /There is no separate reaction-time test/);
+
+  const participantCopy = `${page}\n${tutorial}`;
+  for (const disclosedOrder of [
+    "Fixed order: dim red → dim blue → bright blue → bright red",
+    "Fixed order: dim red, dim blue, bright blue, bright red",
+    "Assigned order: dim red · dim blue · bright blue · bright red",
+    "固定顺序：暗红 → 暗蓝 → 亮蓝 → 亮红",
+    "固定顺序为暗红、暗蓝、亮蓝、亮红",
+    "指定顺序：暗红 · 暗蓝 · 亮蓝 · 亮红",
+  ]) {
+    assert.doesNotMatch(participantCopy, new RegExp(disclosedOrder));
+  }
 
   const v4TypeStart = recordTypes.indexOf("export type StudySessionRecordV4");
   const v4TypeEnd = recordTypes.indexOf("export type StudySessionRecord =", v4TypeStart);
