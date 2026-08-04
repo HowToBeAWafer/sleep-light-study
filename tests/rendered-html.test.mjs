@@ -256,9 +256,15 @@ test("server-renders the Sleep Light Study setup page", async () => {
   assert.match(html, /Create account/);
   assert.match(html, /Choose a password/);
   assert.doesNotMatch(html, /email reminder after waking|提醒邮箱/i);
-  assert.match(html, /Fixed order: dim red → dim blue → bright blue → bright red/);
-  assert.match(html, /Assigned automatically after sign-in/);
-  assert.match(html, /Participants cannot choose or skip the order/);
+  assert.match(html, /Four-session study/);
+  assert.match(html, /The condition for each session is assigned automatically/);
+  assert.match(html, /no selection is required/);
+  assert.doesNotMatch(html, /Fixed order: dim red → dim blue → bright blue → bright red/);
+  assert.doesNotMatch(html, /Fixed order: dim red, dim blue, bright blue, bright red/);
+  assert.doesNotMatch(html, /Assigned order: dim red · dim blue · bright blue · bright red/);
+  assert.doesNotMatch(html, /固定顺序：暗红 → 暗蓝 → 亮蓝 → 亮红/);
+  assert.doesNotMatch(html, /固定顺序为暗红、暗蓝、亮蓝、亮红/);
+  assert.doesNotMatch(html, /指定顺序：暗红 · 暗蓝 · 亮蓝 · 亮红/);
   assert.doesNotMatch(html, /Control — normal sleep/);
   assert.doesNotMatch(html, /name="light-condition"/);
   assert.match(html, /Read tutorial and begin/);
@@ -275,7 +281,7 @@ test("includes attention, pause, termination, and logging controls", async () =>
 
   assert.match(page, /Stay focused on the screen/);
   assert.match(page, /Press /);
-  assert.match(page, /To end the light exposure early, type E, then N, then D/);
+  assert.match(page, /To end the viewing period early, type E, then N, then D/);
   assert.match(page, /PauseRecord,/);
   assert.match(page, /totalPausedDurationMs/);
   assert.match(studyData, /"false_click"/);
@@ -370,7 +376,11 @@ test("supports bilingual tutorials, password accounts, isolated practice, append
   assert.match(page, /admin-review-flag/);
   assert.match(tutorial, /Keep the device and display consistent/);
   assert.match(tutorial, /温度/);
-  assert.match(tutorial, /condition-progress-grid/);
+  assert.doesNotMatch(tutorial, /condition-progress-grid/);
+  assert.match(tutorial, /Current assignment and progress/);
+  assert.match(tutorial, /The condition for each session is assigned automatically/);
+  assert.match(tutorial, /completedCount/);
+  assert.match(tutorial, /remainingCount/);
   assert.match(tutorial, /<strong>黑色十字<\/strong>/);
   assert.match(tutorial, /Practice is not saved and does not count toward the results/);
   assert.match(practice, /Practice — not recorded/);
@@ -378,7 +388,7 @@ test("supports bilingual tutorials, password accounts, isolated practice, append
   assert.match(practice, /stage !== "prompt-end"/);
   assert.doesNotMatch(practice, /localStorage|sessionStorage|fetch\(|Supabase|saveStudyDraft|registerResponse/);
   assert.match(feedback, /Questions or feedback/);
-  assert.match(feedback, /有问题或反馈吗/);
+  assert.match(feedback, /问题与反馈/);
   assert.match(remoteStorage, /submit_participant_feedback/);
   assert.match(remoteStorage, /submit_profile_study_session/);
   assert.doesNotMatch(remoteStorage, /schedule_morning_reminder|cancel_morning_reminder|MorningReminderReceipt/);
@@ -412,7 +422,7 @@ test("admin portal expands organized, safe, detailed session results", async () 
   assert.match(page, /profileMatch/);
   assert.match(
     page,
-    /const STUDY_BUILD_VERSION = "2026-07-31-fixed-four-immediate-alertness-v1"/,
+    /const STUDY_BUILD_VERSION = "2026-08-04-professional-zh-blinded-order-v1"/,
   );
 
   for (const section of [
