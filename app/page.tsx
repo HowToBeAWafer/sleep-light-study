@@ -176,7 +176,7 @@ const FINAL_STORAGE_KEY = "sleep-light-study:sessions:v2";
 const OVERNIGHT_DRAFT_KEY = "sleep-light-study:overnight-draft:v1";
 const RETIRED_EMAIL_PLAN_KEY = "sleep-light-study:morning-reminder-plan:v1";
 const LANGUAGE_STORAGE_KEY = "sleep-light-study:language:v1";
-const STUDY_BUILD_VERSION = "2026-07-31-fixed-four-immediate-alertness-v1";
+const STUDY_BUILD_VERSION = "2026-08-04-professional-zh-blinded-order-v1";
 const DRAFT_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 const TEST_PROFILE_ID = "00000000-0000-4000-8000-000000000001";
 
@@ -437,7 +437,7 @@ function TouchSessionControls({
       </button>
       <span className="touch-control-status" aria-live="polite">
         {endArmed
-          ? tr(language, "Tap End again within three seconds to end the light exposure.", "请在三秒内再次点击“结束”以提前结束光照。")
+          ? tr(language, "Tap End again within three seconds to end the light exposure.", "请在三秒内再次点击“结束”，以提前结束观看阶段。")
           : ""}
       </span>
     </div>
@@ -607,7 +607,7 @@ function AdminPortal({ language, onExit }: { language: Language; onExit: () => v
         <header className="admin-header">
           <div>
             <p className="eyebrow">{tr(language, "Remote study data", "远程研究数据")}</p>
-            <h1 id="admin-dashboard-title">{tr(language, "Study-name records", "实验姓名记录")}</h1>
+            <h1 id="admin-dashboard-title">{tr(language, "Study-name records", "研究用名记录")}</h1>
             <p>{tr(language, `Authenticated as ${ADMIN_EMAIL}. Old and current record versions remain available; updates never overwrite prior answers.`, `已以 ${ADMIN_EMAIL} 登录。旧版和当前版本记录都会保留，更新不会覆盖以前的回答。`)}</p>
           </div>
           <div className="admin-header-actions">
@@ -636,7 +636,7 @@ function AdminPortal({ language, onExit }: { language: Language; onExit: () => v
 
         <div className="admin-stats" aria-label={tr(language, "Remote data summary", "远程数据汇总")}>
           <div><span>{tr(language, "Sessions", "实验记录")}</span><strong>{dashboardStats.sessions}</strong></div>
-          <div><span>{tr(language, "Study names", "实验姓名")}</span><strong>{dashboardStats.participants}</strong></div>
+          <div><span>{tr(language, "Study names", "研究用名")}</span><strong>{dashboardStats.participants}</strong></div>
           <div><span>{tr(language, "Needs review", "需要复核")}</span><strong>{dashboardStats.flagged}</strong></div>
           <div><span>{tr(language, "Feedback", "反馈/问题")}</span><strong>{dashboardStats.feedback}</strong></div>
         </div>
@@ -690,7 +690,7 @@ function AdminPortal({ language, onExit }: { language: Language; onExit: () => v
               <caption>{tr(language, `${filteredSessions.length} of ${sessions.length} remote sessions`, `显示 ${sessions.length} 条记录中的 ${filteredSessions.length} 条`)}</caption>
               <thead>
                 <tr>
-                  <th>{tr(language, "Study name", "实验姓名")}</th>
+                  <th>{tr(language, "Study name", "研究用名")}</th>
                   <th>{tr(language, "Review", "复核")}</th>
                   <th>{tr(language, "Condition / progress", "条件 / 进度")}</th>
                   <th>{tr(language, "Started", "开始时间")}</th>
@@ -1107,7 +1107,7 @@ export default function Home() {
           setParticipantProgressStatus("loaded");
         }, () => {
           setParticipantProgressStatus("failed");
-          setFormError("Your overnight progress was restored, but the participant account could not be verified. Keep this browser record and contact the researcher before final submission. / 整晚进度已恢复，但无法验证参与者账户。请保留此浏览器中的记录，并在最终提交前联系研究者。");
+          setFormError("Your overnight progress was restored, but the participant account could not be verified. Keep this browser record and contact the researcher before final submission. / 已恢复未完成的实验进度，但暂时无法验证参与者账户。请保留本浏览器中的记录，并在最终提交前联系研究者。");
         });
       } else {
         setParticipantProgressStatus("idle");
@@ -1766,7 +1766,7 @@ export default function Home() {
       saveOvernightDraft(record);
       setPhase("post-exposure-survey");
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : tr(language, "The overnight record could not be prepared.", "无法准备整晚实验记录。"));
+      setFormError(error instanceof Error ? error.message : tr(language, "The overnight record could not be prepared.", "无法建立本次实验记录。"));
       setPhase("setup");
     }
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
@@ -2107,7 +2107,7 @@ export default function Home() {
 
   const startSession = async () => {
     if (restoringDraft) {
-      setFormError(tr(language, "Please wait while this browser checks for saved overnight progress.", "请稍候，浏览器正在检查已保存的整晚实验进度。"));
+      setFormError(tr(language, "Please wait while this browser checks for saved session progress.", "请稍候，系统正在检查已保存的实验进度。"));
       return;
     }
     const cleanParticipantId = normalizeParticipantName(participantId);
@@ -2119,7 +2119,7 @@ export default function Home() {
       return;
     }
     if (!cleanParticipantId || (isTestParticipantId(cleanParticipantId) && !conditionId)) {
-      setFormError(tr(language, "Enter your study name. Test mode must also select a condition.", "请输入实验姓名；测试模式还需要选择一个条件。"));
+      setFormError(tr(language, "Enter your study name. Test mode must also select a condition.", "请输入研究用名；测试模式还需要选择一个实验条件。"));
       requestAnimationFrame(() => {
         if (!cleanParticipantId) participantInputRef.current?.focus();
         else document.querySelector<HTMLInputElement>('input[name="light-condition"]')?.focus();
@@ -2127,7 +2127,7 @@ export default function Home() {
       return;
     }
     if (!isTestParticipantId(cleanParticipantId) && !isValidParticipantName(cleanParticipantId)) {
-      setFormError(tr(language, "Use a study name between 1 and 80 characters without control characters. A nickname is recommended.", "实验姓名需为 1–80 个字符且不能包含控制字符。建议使用不暴露身份的网名。"));
+      setFormError(tr(language, "Use a study name between 1 and 80 characters without control characters. A nickname is recommended.", "研究用名需为 1–80 个字符，且不能包含控制字符。建议使用无法直接识别你身份的昵称。"));
       participantInputRef.current?.focus();
       return;
     }
@@ -2144,7 +2144,7 @@ export default function Home() {
         setFormError("");
         setPhase("tutorial");
       } catch (error) {
-        setFormError(error instanceof Error ? error.message : tr(language, "This browser cannot begin the overnight protocol.", "此浏览器无法开始整晚实验。"));
+        setFormError(error instanceof Error ? error.message : tr(language, "This browser cannot begin the study session.", "此浏览器无法开始本次实验。"));
       }
       return;
     }
@@ -2259,13 +2259,13 @@ export default function Home() {
         ? tr(
           language,
           "This study name already has an account. Choose Sign in, or use a different unique nickname.",
-          "这个实验姓名已经有账户。请选择“登录”，或使用另一个独一无二的网名。",
+          "该研究用名已注册账户。请选择“登录”，或使用其他尚未注册的昵称。",
         )
         : credentialMismatch
           ? tr(
             language,
             "The study name and password did not match. Check both and try again. Older accounts can be upgraded with their original recovery code.",
-            "实验姓名与密码不匹配，请检查后重试。旧账户可以使用原来的恢复码升级。",
+            "研究用名与密码不匹配，请检查后重试。旧账户可使用原恢复码完成升级。",
           )
         : serviceUnavailable
           ? tr(
@@ -2294,7 +2294,7 @@ export default function Home() {
       setFormError("");
       setPhase("instructions");
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : tr(language, "The overnight record could not be prepared.", "无法准备整晚实验记录。"));
+      setFormError(error instanceof Error ? error.message : tr(language, "The session record could not be prepared.", "无法建立本次实验记录。"));
       setPhase("setup");
     }
   };
@@ -2310,7 +2310,7 @@ export default function Home() {
     };
     const savedLocally = saveOvernightDraft(nextRecord, { requireLocal: true });
     if (!savedLocally && !isTestParticipantId(record.participantId)) {
-      setFormError(tr(language, "The sleep-start checkpoint could not be saved in this browser. Enable site storage and try again before closing the page.", "无法在此浏览器保存入睡节点。请允许网站存储，然后在关闭页面前重试。"));
+      setFormError(tr(language, "The sleep-start checkpoint could not be saved in this browser. Enable site storage and try again before closing the page.", "无法在此浏览器保存睡眠阶段开始记录。请允许本网站使用存储空间，并在关闭页面前重试。"));
       return;
     }
     setFormError("");
@@ -2334,7 +2334,7 @@ export default function Home() {
     setUseTouchControls(afterWaking.touchCapable);
     const savedLocally = saveOvernightDraft(nextRecord, { requireLocal: true });
     if (!savedLocally && !isTestParticipantId(record.participantId)) {
-      setFormError(tr(language, "The morning checkpoint could not be saved in this browser. Enable site storage and try again.", "无法在此浏览器保存早晨节点，请允许网站存储后重试。"));
+      setFormError(tr(language, "The morning checkpoint could not be saved in this browser. Enable site storage and try again.", "无法在此浏览器保存次晨返回记录。请允许本网站使用存储空间后重试。"));
       return;
     }
     setFormError("");
@@ -2600,34 +2600,34 @@ export default function Home() {
       <main className="instructions-screen">
         <section className="instructions-card" aria-labelledby="instructions-title">
           <p className="eyebrow">{useTouchControls ? tr(language, "Touch-device instructions", "触屏设备说明") : tr(language, "Keyboard instructions", "电脑键盘说明")}</p>
-          <h1 id="instructions-title">{tr(language, "Stay focused on the screen.", "请持续专注屏幕。")}</h1>
+          <h1 id="instructions-title">{tr(language, "Stay focused on the screen.", "请持续注视屏幕。")}</h1>
           <p className="instructions-lead">
-            {tr(language, "Up to four black crosses will appear about 50–70 seconds apart during the five-minute light exposure.", "五分钟光照期间最多出现四次黑色十字，间隔约为 50–70 秒。")}
+            {tr(language, "A small number of black crosses will appear at unpredictable times during the five-minute viewing period.", "在五分钟观看阶段，屏幕会不定时出现少量黑色十字。")}
           </p>
           <ul className="instruction-list" data-control-mode={useTouchControls ? "touch" : "keyboard"}>
             <li>
               <span>+</span>
               <p>
                 {tr(language, "When a black cross appears, immediately ", "黑色十字出现时，请立即")}
-                <strong>{useTouchControls ? tr(language, "tap anywhere on the color", "点击彩色画面任意位置") : tr(language, "click anywhere", "点击任意位置")}</strong>
+                <strong>{useTouchControls ? tr(language, "tap anywhere on the color", "轻触彩色画面任意位置") : tr(language, "click anywhere", "点击任意位置")}</strong>
                 {useTouchControls ? "。" : <>{tr(language, " or press ", "，或按")}<kbd>Space</kbd>{tr(language, ".", "键。")}</>}
               </p>
             </li>
             {useTouchControls ? (
               <>
                 <li><span>Ⅱ</span><p>{tr(language, "Use ", "使用底部的")}<strong>{tr(language, "Pause", "暂停")}</strong>{tr(language, " at the bottom. Tap ", "按钮；点击")}<strong>{tr(language, "Resume", "继续")}</strong>{tr(language, " to continue.", "即可继续。")}</p></li>
-                <li><span>END</span><p>{tr(language, "To end the light exposure early, tap End twice within three seconds.", "如需提前结束光照，请在三秒内连续点击两次“结束”。")}</p></li>
+                <li><span>END</span><p>{tr(language, "To end the viewing period early, tap End twice within three seconds.", "如需提前结束观看，请在三秒内连续点击两次“结束”。")}</p></li>
               </>
             ) : (
               <>
                 <li><span>P</span><p>{tr(language, "Press ", "按")}<kbd>P</kbd>{tr(language, " to pause. Press P again to continue.", "暂停，再按一次 P 继续。")}</p></li>
-                <li><span>END</span><p>{tr(language, "To end the light exposure early, type E, then N, then D.", "如需提前结束光照，请依次输入 E、N、D。")}</p></li>
+                <li><span>END</span><p>{tr(language, "To end the viewing period early, type E, then N, then D.", "如需提前结束观看，请依次输入 E、N、D。")}</p></li>
               </>
             )}
           </ul>
           <p className="instruction-reminder">
             {language === "zh"
-              ? <><strong>不要切换应用、查看消息、浏览网页或使用另一个屏幕。</strong>没有十字时的点击或多余点击也会被记录。如果画面造成不适，请<strong>立即停止</strong>。</>
+              ? <><strong>不要切换应用、查看消息、浏览网页或使用其他屏幕。</strong>十字未出现时的点击及重复点击也会被记录。若画面造成不适，请<strong>立即停止实验</strong>。</>
               : <><strong>Do not switch apps, read messages, browse, or use another screen during the five-minute display.</strong> Responses made when no cross is visible are recorded. <strong>Stop if the display causes discomfort.</strong></>}
           </p>
           {!setupIsTestMode ? (
@@ -2637,7 +2637,7 @@ export default function Home() {
             >
               {draftProtection.localSaved
                 ? tr(language, "This session can be recovered in this browser if the page closes.", "即使网页关闭，也可在此浏览器恢复本次实验。")
-                : tr(language, "Browser storage is unavailable. Enable site storage before starting the exposure.", "浏览器存储不可用，请在开始光照前允许网站存储。")}
+                : tr(language, "Browser storage is unavailable. Enable site storage before starting the exposure.", "浏览器存储不可用。请在开始观看前允许本网站使用存储空间。")}
             </p>
           ) : null}
           {formError ? <p className="form-error" role="alert">{formError}</p> : null}
@@ -2658,11 +2658,11 @@ export default function Home() {
             className="primary-button instruction-start"
             onClick={continueToCountdown}
           >
-            {tr(language, "I understand — start exposure", "我已了解——开始光照")}
+            {tr(language, "I understand — start exposure", "我已了解——开始观看")}
           </button>
           <small>
             {useTouchControls
-              ? tr(language, "Tap the button to start. Full screen will open when supported.", "点击按钮开始；设备支持时将进入全屏。")
+              ? tr(language, "Tap the button to start. Full screen will open when supported.", "轻触按钮开始；设备支持时将进入全屏。")
               : tr(language, "Press Space or Enter to start. Full screen will open next.", "也可按空格或回车开始，随后将进入全屏。")}
           </small>
         </section>
@@ -2673,9 +2673,9 @@ export default function Home() {
   if (phase === "countdown") {
     return (
       <main className="countdown-screen" aria-live="assertive">
-        <p>{tr(language, "Light exposure begins in", "光照将在倒计时后开始")}</p>
+        <p>{tr(language, "Light exposure begins in", "观看阶段将在倒计时后开始")}</p>
         <strong key={countdown}>{countdown}</strong>
-        <span>{useTouchControls ? tr(language, "Tap the color", "点击彩色画面") : tr(language, "Click or press Space", "点击或按空格")}{tr(language, " when a black cross appears.", "，当黑色十字出现时作出反应。")}</span>
+        <span>{useTouchControls ? tr(language, "Tap the color", "轻触彩色画面") : tr(language, "Click or press Space", "点击或按空格")}{tr(language, " when a black cross appears.", "，当黑色十字出现时作出反应。")}</span>
       </main>
     );
   }
@@ -2684,9 +2684,9 @@ export default function Home() {
     return (
       <main className={`paused-screen ${useTouchControls ? "touch-controls-active" : ""}`} aria-live="assertive">
         <div className="paused-card">
-          <p>{tr(language, "Light exposure paused", "光照已暂停")}</p>
+          <p>{tr(language, "Light exposure paused", "观看阶段已暂停")}</p>
           <h1>{tr(language, "Paused", "已暂停")}</h1>
-          <span>{tr(language, "The five-minute exposure timer is frozen.", "五分钟光照计时器已停止。")}</span>
+          <span>{tr(language, "The five-minute exposure timer is frozen.", "五分钟观看计时已暂停。")}</span>
           <strong>{useTouchControls ? tr(language, "Use the controls below to continue", "使用下方按钮继续") : tr(language, "Press P to continue", "按 P 继续")}</strong>
           <small>{useTouchControls ? tr(language, "Tap End twice to end the exposure early.", "连续点击两次“结束”可提前结束。") : tr(language, "Type E, N, D to end the exposure early.", "依次输入 E、N、D 可提前结束。")}</small>
         </div>
@@ -2776,18 +2776,18 @@ export default function Home() {
     return (
       <main className="overnight-shell">
         <section className="overnight-card" aria-labelledby="sleep-ready-title">
-          <p className="eyebrow">{tr(language, "Screen exposure and immediate scale saved", "屏幕暴露和即时量表已保存")}</p>
+          <p className="eyebrow">{tr(language, "Screen exposure and immediate scale saved", "观看记录与即时困倦评估已保存")}</p>
           <h1 id="sleep-ready-title">{tr(language, "Go to bed at your normal time.", "请在平常时间上床睡觉。")}</h1>
           <p>
             {isControl
               ? tr(language, "This is the control condition. No color or brightness stimulus was shown.", "这是对照条件，没有播放任何颜色或亮度刺激。")
               : overnightRecord.exposureStatus === "terminated"
-                ? tr(language, "The light exposure ended early, and that event has been recorded.", "光照已提前结束，此事件已经记录。")
-                : tr(language, "The five-minute light exposure is complete.", "五分钟光照已经完成。")}
+                ? tr(language, "The light exposure ended early, and that event has been recorded.", "观看阶段已提前结束，系统已记录该情况。")
+                : tr(language, "The five-minute light exposure is complete.", "五分钟观看阶段已完成。")}
           </p>
           <div className="overnight-status-grid">
             <div><span>{tr(language, "Condition", "实验条件")}</span><strong>{conditionLabel(overnightRecord.conditionId, language)}</strong></div>
-            <div><span>{tr(language, "Pre-exposure Karolinska Sleepiness Scale", "光照前卡罗林斯卡困倦量表")}</span><strong>{overnightRecord.preSurvey.sleepinessKss} / 9</strong></div>
+            <div><span>{tr(language, "Pre-exposure Karolinska Sleepiness Scale", "观看前卡罗林斯卡困倦量表")}</span><strong>{overnightRecord.preSurvey.sleepinessKss} / 9</strong></div>
             <div><span>{tr(language, "Device", "设备")}</span><strong>{deviceCategoryLabel(overnightRecord.deviceInfo.beforeSleep.confirmedCategory, language)}</strong></div>
           </div>
           <p className="overnight-guidance">
@@ -2795,13 +2795,13 @@ export default function Home() {
           </p>
           <p className={`draft-save-note ${protectionClass}`} role="status">
             {isTestMode
-              ? tr(language, "Test mode does not save this overnight record.", "测试模式不会保存整晚实验记录。")
+              ? tr(language, "Test mode does not save this session record.", "测试模式不会保存本次实验记录。")
               : draftProtection.localSaved && draftProtection.remoteStatus === "saved"
-                ? tr(language, "Overnight progress is protected remotely and in this browser.", "整晚进度已在远程和此浏览器中受到保护。")
+                ? tr(language, "Session progress is saved remotely and in this browser.", "实验进度已保存至云端和本机浏览器。")
                 : draftProtection.localSaved && draftProtection.remoteStatus === "failed"
-                  ? tr(language, "Overnight progress is saved in this browser; remote backup is temporarily unavailable.", "整晚进度已保存在此浏览器；远程备份暂时不可用。")
+                  ? tr(language, "Session progress is saved in this browser; remote backup is temporarily unavailable.", "实验进度已保存在本机浏览器；云端备份暂时不可用。")
                   : draftProtection.localSaved && draftProtection.remoteStatus === "saving"
-                    ? tr(language, "Protecting overnight progress…", "正在保护整晚进度…")
+                    ? tr(language, "Saving session progress…", "正在保存实验进度…")
                     : tr(language, "Browser storage is unavailable, so the recovery key cannot be retained. Do not close this page.", "浏览器存储不可用，无法保留恢复信息，请不要关闭此页面。")}
           </p>
           {formError ? <p className="form-error" role="alert">{formError}</p> : null}
@@ -2821,15 +2821,15 @@ export default function Home() {
     return (
       <main className="overnight-shell morning-return-shell">
         <section className="overnight-card" aria-labelledby="morning-return-title">
-          <p className="eyebrow">{tr(language, "Overnight pause", "整晚等待")}</p>
+          <p className="eyebrow">{tr(language, "Sleep period", "睡眠阶段")}</p>
           <h1 id="morning-return-title">{tr(language, "Sleep normally. Return here after waking.", "请正常睡眠，醒来后返回此页。")}</h1>
-          <p>{tr(language, "The browser may be closed or the device may be locked. After your normal sleep, sign in again on any browser if needed; your saved progress can be restored.", "可以关闭浏览器或锁定设备。按照平常方式睡醒后，如有需要，可在任意浏览器重新登录并恢复已保存进度。")}</p>
+          <p>{tr(language, "The browser may be closed or the device may be locked. After your normal sleep, sign in again on any browser if needed; your saved progress can be restored.", "可以关闭浏览器或锁定设备。按平常作息醒来后，如有需要，可在任意浏览器重新登录并恢复已保存的进度。")}</p>
           <div className="overnight-status-grid">
-            <div><span>{tr(language, "Study name", "实验姓名")}</span><strong>{overnightRecord.participantId}</strong></div>
-            <div><span>{tr(language, "Sleep marked at", "标记入睡时间")}</span><strong>{formatDateTime(overnightRecord.sleepStartedAtIso, language)}</strong></div>
+            <div><span>{tr(language, "Study name", "研究用名")}</span><strong>{overnightRecord.participantId}</strong></div>
+            <div><span>{tr(language, "Sleep marked at", "开始睡眠阶段的记录时间")}</span><strong>{formatDateTime(overnightRecord.sleepStartedAtIso, language)}</strong></div>
             <div><span>{tr(language, "Condition", "实验条件")}</span><strong>{conditionLabel(overnightRecord.conditionId, language)}</strong></div>
           </div>
-          <p className="overnight-guidance">{tr(language, "There is no required washout day in this website. Follow the researcher's assigned schedule; consecutive-night sessions are allowed.", "网站不强制要求间隔一天。请按照研究者安排的日期和顺序；可以连续两晚进行不同实验。")}</p>
+          <p className="overnight-guidance">{tr(language, "There is no required washout day in this website. Follow the researcher's assigned schedule; consecutive-night sessions are allowed.", "本研究不要求两次实验之间必须间隔一天。请按研究安排完成实验，连续数晚参加亦可。")}</p>
           {formError ? <p className="form-error" role="alert">{formError}</p> : null}
           <button
             className="primary-button overnight-primary"
@@ -2896,27 +2896,27 @@ export default function Home() {
         <section className="results-card">
           <div className="complete-mark" aria-hidden="true">✓</div>
           <p className="eyebrow">{result.exposureStatus === "terminated"
-            ? tr(language, "Exposure ended early", "光照提前结束")
+            ? tr(language, "Exposure ended early", "观看阶段提前结束")
             : resultIsTestMode
               ? tr(language, "Test mode", "测试模式")
               : tr(language, "Session complete", "本次实验已完成")}</p>
-          <h1>{resultIsTestMode ? tr(language, "Test session complete.", "测试实验完成。") : tr(language, "Thank you. The full record is complete.", "谢谢，完整实验记录已完成。")}</h1>
+          <h1>{resultIsTestMode ? tr(language, "Test session complete.", "测试已完成。") : tr(language, "Thank you. The full record is complete.", "感谢参与，本次实验记录已完整保存。")}</h1>
           <p className="results-lead">
-            {tr(language, "Study name ", "实验姓名 ")}<strong>{result.participantId}</strong>{tr(language, " completed the ", " 已完成 ")}<strong>{conditionLabel(result.conditionId, language)}</strong>{tr(language, " session.", " 条件。")}
+            {tr(language, "Study name ", "研究用名 ")}<strong>{result.participantId}</strong>{tr(language, " completed the ", " 已完成本次 ")}<strong>{conditionLabel(result.conditionId, language)}</strong>{tr(language, " session.", " 实验。")}
           </p>
 
-          <div className="result-stats" aria-label={tr(language, "Session summary", "实验汇总")}>
-            <div><span>{tr(language, "Pre-exposure Karolinska Sleepiness Scale", "光照前卡罗林斯卡困倦量表")}</span><strong>{result.preSurvey.sleepinessKss}<small> / 9</small></strong></div>
-            <div><span>{isCurrentProtocol ? tr(language, "Post-exposure Karolinska Sleepiness Scale", "光照后卡罗林斯卡困倦量表") : tr(language, "Legacy after-waking Karolinska Sleepiness Scale", "旧版睡醒后卡罗林斯卡困倦量表")}</span><strong>{isCurrentProtocol ? result.postExposureSurvey?.sleepinessKss ?? "—" : result.postSurvey?.sleepinessKss ?? "—"}<small> / 9</small></strong></div>
-            <div><span>{tr(language, "Exposure reaction mean", "观看期间平均反应时间")}</span><strong>{reactionMean == null ? "—" : Math.round(reactionMean)}<small>{reactionMean == null ? "" : " ms"}</small></strong></div>
-            <div><span>{tr(language, "Time watched", "实际观看时长")}</span><strong>{(result.actualDurationMs / 1000).toFixed(1)}<small> s</small></strong></div>
+          <div className="result-stats" aria-label={tr(language, "Session summary", "本次实验摘要")}>
+            <div><span>{tr(language, "Pre-exposure Karolinska Sleepiness Scale", "观看前卡罗林斯卡困倦量表")}</span><strong>{result.preSurvey.sleepinessKss}<small> / 9</small></strong></div>
+            <div><span>{isCurrentProtocol ? tr(language, "Post-exposure Karolinska Sleepiness Scale", "观看后卡罗林斯卡困倦量表") : tr(language, "Legacy after-waking Karolinska Sleepiness Scale", "旧版醒后卡罗林斯卡困倦量表")}</span><strong>{isCurrentProtocol ? result.postExposureSurvey?.sleepinessKss ?? "—" : result.postSurvey?.sleepinessKss ?? "—"}<small> / 9</small></strong></div>
+            <div><span>{tr(language, "Exposure reaction mean", "观看阶段平均反应时")}</span><strong>{reactionMean == null ? "—" : Math.round(reactionMean)}<small>{reactionMean == null ? "" : " ms"}</small></strong></div>
+            <div><span>{tr(language, "Time watched", "有效观看时长")}</span><strong>{(result.actualDurationMs / 1000).toFixed(1)}<small> s</small></strong></div>
           </div>
 
           {isCurrentProtocol && !resultIsTestMode ? (
             <p className="session-event-summary" role="status">
-              <strong>{completedCount}</strong> {tr(language, "complete", "项已完成")}
+              <strong>{completedCount}</strong> {tr(language, "complete", "次已完成")}
               <span>·</span>
-              <strong>{remainingCount}</strong> {tr(language, "remaining", "项待完成")}
+              <strong>{remainingCount}</strong> {tr(language, "remaining", "次待完成")}
             </p>
           ) : null}
 
@@ -2926,7 +2926,7 @@ export default function Home() {
               <span>·</span>
               <strong>{summary.misses}</strong> {tr(language, "missed", "次错过")}
               <span>·</span>
-              <strong>{summary.falseClicks}</strong> {tr(language, summary.falseClicks === 1 ? "no-cross or extra response" : "no-cross or extra responses", "次无十字或多余反应")}
+              <strong>{summary.falseClicks}</strong> {tr(language, summary.falseClicks === 1 ? "no-cross or extra response" : "no-cross or extra responses", "次十字未出现时或重复响应")}
               <span>·</span>
               <strong>{summary.pauses}</strong> {tr(language, summary.pauses === 1 ? "pause" : "pauses", "次暂停")}
             </p>
@@ -2971,9 +2971,9 @@ export default function Home() {
 
           {result.conditionId !== "control" && (result.fullscreenRequestFailed || !result.fullscreenAtStart || result.environmentEvents.length || summary.omitted) ? (
             <p className="quality-warning">
-              {tr(language, `Quality flag: ${result.environmentEvents.length} display interruption${result.environmentEvents.length === 1 ? "" : "s"} recorded.`, `质量提示：记录到 ${result.environmentEvents.length} 次显示中断。`)}
-              {result.fullscreenRequestFailed || !result.fullscreenAtStart ? tr(language, " Full screen was not established reliably.", " 未能可靠进入全屏。") : ""}
-              {summary.omitted ? tr(language, ` ${summary.omitted} cross event${summary.omitted === 1 ? " was" : "s were"} omitted.`, ` 省略了 ${summary.omitted} 次十字事件。`) : ""}
+              {tr(language, `Quality flag: ${result.environmentEvents.length} display interruption${result.environmentEvents.length === 1 ? "" : "s"} recorded.`, `数据质量提示：记录到 ${result.environmentEvents.length} 次显示中断。`)}
+              {result.fullscreenRequestFailed || !result.fullscreenAtStart ? tr(language, " Full screen was not established reliably.", " 未能稳定保持全屏显示。") : ""}
+              {summary.omitted ? tr(language, ` ${summary.omitted} cross event${summary.omitted === 1 ? " was" : "s were"} omitted.`, ` 有 ${summary.omitted} 次计划中的十字未显示。`) : ""}
             </p>
           ) : null}
 
@@ -3048,7 +3048,7 @@ export default function Home() {
             <p className="feedback-status">{tr(language, "Feedback skipped. You may continue.", "已跳过反馈，可以继续。")}</p>
           )}
 
-          <button className="text-button" onClick={resetToSetup}>{tr(language, "Start another assigned session", "开始另一个已分配的实验")}</button>
+          <button className="text-button" onClick={resetToSetup}>{tr(language, "Start the next session", "开始下一次实验")}</button>
         </section>
       </main>
     );
@@ -3061,7 +3061,7 @@ export default function Home() {
       <nav className="topbar" aria-label={tr(language, "Study information", "研究信息")}>
         <a href="#setup" className="brand"><span className="brand-dot" />Sleep Light Study</a>
         <div className="topbar-tools">
-          <span className="protocol-tag">Protocol SL-V4 · {tr(language, "Fixed four-session order", "固定四次顺序")}</span>
+          <span className="protocol-tag">Protocol SL-V4 · {tr(language, "Four-session study", "四次实验方案")}</span>
           <div className="language-toggle" role="group" aria-label={tr(language, "Choose language", "选择语言")}>
             <button type="button" aria-pressed={language === "en"} onClick={() => changeLanguage("en")}>English</button>
             <button type="button" aria-pressed={language === "zh"} onClick={() => changeLanguage("zh")}>中文</button>
@@ -3071,41 +3071,41 @@ export default function Home() {
 
       <div className="setup-grid" id="setup">
         <section className="intro-panel">
-          <p className="eyebrow"><span className="live-dot" />{tr(language, "Pre-sleep screen-color research", "睡前屏幕颜色研究")}</p>
+          <p className="eyebrow"><span className="live-dot" />{tr(language, "Pre-sleep screen-color research", "睡前屏幕颜色暴露研究")}</p>
           <h1>
             {tr(
               language,
               "A study of how short pre-sleep screen-color exposure relates to immediate and next-morning alertness.",
-              "研究短时间睡前屏幕颜色暴露与即时及第二天早晨清醒程度之间的关系。",
+              "睡前短时屏幕颜色暴露与即时困倦及次晨清醒状态的关联研究",
             )}
           </h1>
           <p className="intro-copy">
             {tr(
               language,
               "Do not change your normal bedtime for this study. Do not go to bed earlier or later for the experiment.",
-              "请不要为了本研究改变平常的睡觉时间；不要因实验而提前或推迟上床。",
+              "参加研究期间，请保持平常的就寝时间，不要因实验提前或推迟上床。",
             )}
           </p>
           <p className="intro-copy">
             {language === "zh"
-              ? <><strong>安全：</strong>如果你有光敏性癫痫病史，或闪烁、快速出现的视觉刺激会让你明显不适，请不要参加。画面造成不适时，请立即停止。</>
+              ? <><strong>安全提示：</strong>若你有光敏性癫痫病史，或曾因闪烁、快速出现的视觉刺激感到明显不适，请勿参加。若观看过程中出现不适，请立即终止本次实验。</>
               : <><strong>Safety:</strong> Do not participate if you have a history of photosensitive seizures or significant discomfort with flashing or rapidly appearing visual stimuli. Stop the session if the display causes discomfort.</>}
           </p>
           <ol className="study-steps">
-            <li><span>01</span><div><strong>{tr(language, "Tutorial", "教程")}</strong><p>{tr(language, "Read safety, device, and attention instructions.", "阅读安全、设备与注意任务说明。")}</p></div></li>
-            <li><span>02</span><div><strong>{tr(language, "Questionnaire", "问卷")}</strong><p>{tr(language, "Report your recent sleep and tonight's environment.", "填写最近睡眠和今晚环境情况。")}</p></div></li>
-            <li><span>03</span><div><strong>{tr(language, "Exposure", "屏幕暴露")}</strong><p>{tr(language, "Watch the assigned five-minute color display.", "观看指定的五分钟颜色画面。")}</p></div></li>
-            <li><span>04</span><div><strong>{tr(language, "Karolinska Sleepiness Scale", "卡罗林斯卡困倦量表")}</strong><p>{tr(language, "Answer immediately after the display.", "画面结束后立即作答。")}</p></div></li>
-            <li><span>05</span><div><strong>{tr(language, "Sleep", "睡眠")}</strong><p>{tr(language, "Go to bed at your normal time and sleep normally.", "在平常时间上床并正常睡眠。")}</p></div></li>
-            <li><span>06</span><div><strong>{tr(language, "Next-morning questionnaire", "第二天早晨问卷")}</strong><p>{tr(language, "Return after waking; there is no separate reaction test.", "睡醒后返回；没有独立反应时间测试。")}</p></div></li>
+            <li><span>01</span><div><strong>{tr(language, "Tutorial", "实验说明")}</strong><p>{tr(language, "Read safety, device, and attention instructions.", "阅读安全事项、设备设置及注意力检查说明。")}</p></div></li>
+            <li><span>02</span><div><strong>{tr(language, "Questionnaire", "实验前问卷")}</strong><p>{tr(language, "Report your recent sleep and tonight's environment.", "填写近期睡眠状况及当晚睡眠环境。")}</p></div></li>
+            <li><span>03</span><div><strong>{tr(language, "Exposure", "观看阶段")}</strong><p>{tr(language, "Watch the assigned five-minute color display.", "连续观看系统分配的画面五分钟。")}</p></div></li>
+            <li><span>04</span><div><strong>{tr(language, "Karolinska Sleepiness Scale", "困倦程度评估")}</strong><p>{tr(language, "Answer immediately after the display.", "观看结束后立即填写卡罗林斯卡困倦量表。")}</p></div></li>
+            <li><span>05</span><div><strong>{tr(language, "Sleep", "正常睡眠")}</strong><p>{tr(language, "Go to bed at your normal time and sleep normally.", "按平常作息上床并正常睡眠。")}</p></div></li>
+            <li><span>06</span><div><strong>{tr(language, "Next-morning questionnaire", "次晨问卷")}</strong><p>{tr(language, "Return after waking; there is no separate reaction test.", "醒来后返回网站完成问卷；无需另做反应时间测试。")}</p></div></li>
           </ol>
         </section>
 
         <section className="setup-card" aria-labelledby="session-setup-title">
           <div className="card-heading">
-            <div><p className="card-kicker">{tr(language, "Session setup", "实验设置")}</p><h2 id="session-setup-title">{tr(language, "Prepare tonight's session", "准备今晚的实验")}</h2></div>
+            <div><p className="card-kicker">{tr(language, "Session setup", "实验准备")}</p><h2 id="session-setup-title">{tr(language, "Prepare tonight's session", "开始本次实验")}</h2></div>
             <span className={`ready-pill ${setupIsTestMode ? "test" : setupIsAdminMode ? "admin" : ""}`}>
-              {setupIsTestMode ? tr(language, "Test mode", "测试模式") : setupIsAdminMode ? tr(language, "Administrator", "管理员") : tr(language, "Ready", "准备就绪")}
+              {setupIsTestMode ? tr(language, "Test mode", "测试模式") : setupIsAdminMode ? tr(language, "Administrator", "管理员") : tr(language, "Ready", "可以开始")}
             </span>
           </div>
 
@@ -3119,7 +3119,7 @@ export default function Home() {
                     ? tr(
                         language,
                         `${participantProgress.completedSequencePositions.length} complete · ${4 - participantProgress.completedSequencePositions.length} remaining`,
-                        `${participantProgress.completedSequencePositions.length} 项已完成 · ${4 - participantProgress.completedSequencePositions.length} 项待完成`,
+                        `已完成 ${participantProgress.completedSequencePositions.length} 次 · 剩余 ${4 - participantProgress.completedSequencePositions.length} 次`,
                       )
                     : participantProgressStatus === "failed"
                       ? tr(language, "Progress unavailable — press Begin to retry", "暂时无法读取进度——点击开始可重试")
@@ -3147,7 +3147,7 @@ export default function Home() {
             </div>
           ) : (
             <>
-              <label className="field-label" htmlFor="participant-id">{tr(language, "Study name (real name or nickname)", "实验姓名（真实姓名或网名）")}</label>
+              <label className="field-label" htmlFor="participant-id">{tr(language, "Study name (real name or nickname)", "研究用名（可使用真名或昵称）")}</label>
               <input
                 ref={participantInputRef}
                 id="participant-id"
@@ -3167,7 +3167,7 @@ export default function Home() {
               {!setupIsAdminMode && !setupIsTestMode ? (
                 <>
                   <p className="profile-field-help">
-                    {tr(language, "Your name must be unique. A non-identifying nickname is recommended.", "姓名必须独一无二，建议使用不会暴露身份的网名。")}
+                    {tr(language, "Your name must be unique. A non-identifying nickname is recommended.", "该名称需与其他参与者不同。建议使用无法直接识别你身份的昵称。")}
                   </p>
                   <div className="account-mode-switch" role="group" aria-label={tr(language, "Choose account action", "选择账户操作")}>
                     <button
@@ -3236,7 +3236,7 @@ export default function Home() {
                     {tr(
                       language,
                       "Use 8–128 characters. Your password is converted into a slow cryptographic proof in this browser; the password itself is not saved or sent. There is no automatic password reset, so keep it in a password manager.",
-                      "请使用 8–128 个字符。密码会在本浏览器中转换成较慢的加密凭证；密码本身不会被保存或发送。目前没有自动重置密码功能，请将密码保存在密码管理器中。",
+                      "请设置 8–128 个字符的密码。密码会先在本浏览器中进行安全处理，系统不会保存或发送密码原文。本网站暂不支持自动重置密码，请妥善保存。",
                     )}
                   </p>
                   <details className="recovery-access-details">
@@ -3296,12 +3296,12 @@ export default function Home() {
               <span>{tr(language, "Assigned automatically after sign-in", "登录后自动分配")}</span>
               <strong>
                 {participantProgress?.nextConditionId
-                  ? conditionLabel(participantProgress.nextConditionId, language)
+                  ? tr(language, "Your next session is ready", "下一次实验已准备就绪")
                   : participantProgressStatus === "loaded"
                     ? tr(language, "All four sessions complete", "四次实验均已完成")
-                    : tr(language, "Fixed order: dim red → dim blue → bright blue → bright red", "固定顺序：暗红 → 暗蓝 → 亮蓝 → 亮红")}
+                    : tr(language, "Sign in to view your progress", "登录后查看实验进度")}
               </strong>
-              <small>{tr(language, "Participants cannot choose or skip the order.", "受试者不能自行选择或跳过顺序。")}</small>
+              <small>{tr(language, "The condition for each session is assigned automatically; no selection is required.", "每次实验条件由系统自动分配，无需自行选择。")}</small>
             </div>
           ) : null}
 
@@ -3322,7 +3322,7 @@ export default function Home() {
 
           <div className="session-note">
             <span aria-hidden="true">⌁</span>
-            <p><strong>{tr(language, "Study schedule", "实验安排")}</strong> {tr(language, "Fixed order: dim red, dim blue, bright blue, bright red. Consecutive-night sessions are allowed, but do not change your normal bedtime.", "固定顺序为暗红、暗蓝、亮蓝、亮红。可以连续几晚进行，但不要改变平常睡觉时间。")}</p>
+            <p><strong>{tr(language, "Study schedule", "实验安排")}</strong> {tr(language, "Complete four sessions. Consecutive-night sessions are allowed, but do not change your normal bedtime.", "本研究共需完成四次实验，可连续数晚进行；参加期间请保持平常的就寝时间。")}</p>
           </div>
           <div className="local-data-note">
             <span>
@@ -3330,7 +3330,7 @@ export default function Home() {
                 ? tr(language, "Remote records remain protected until administrator sign-in succeeds.", "管理员登录成功前，远程记录会继续受到保护。")
                 : setupIsTestMode
                   ? tr(language, "The hidden test participant never writes session data to this browser or database.", "内置测试用户不会向浏览器或数据库写入实验数据。")
-                  : tr(language, "Sign in with the same study name and password to restore an unfinished session on another browser or device. Earlier versions and answers are never overwritten.", "在其他浏览器或设备使用相同实验姓名和密码登录，即可恢复未完成的实验；以前版本和回答不会被覆盖。")}
+                  : tr(language, "Sign in with the same study name and password to restore an unfinished session on another browser or device. Earlier versions and answers are never overwritten.", "使用相同研究用名和密码，可在其他浏览器或设备恢复未完成的实验进度。历史记录与先前回答不会被覆盖。")}
             </span>
           </div>
         </section>
@@ -3338,7 +3338,7 @@ export default function Home() {
 
       <footer>
         <span>Sleep Light Study</span>
-        <span>{tr(language, "Assigned order: dim red · dim blue · bright blue · bright red", "指定顺序：暗红 · 暗蓝 · 亮蓝 · 亮红")}</span>
+        <span>{tr(language, "Four sessions · conditions assigned automatically", "共四次实验 · 条件由系统自动分配")}</span>
       </footer>
     </main>
   );
