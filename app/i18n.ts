@@ -16,7 +16,7 @@ export const COMMON_COPY = {
   selectOne: { en: "Select one", zh: "请选择" },
   yes: { en: "Yes", zh: "是" },
   no: { en: "No", zh: "否" },
-  preferNotToAnswer: { en: "Prefer not to answer", zh: "不愿回答" },
+  preferNotToAnswer: { en: "Prefer not to answer", zh: "选择不作答" },
   phone: { en: "Phone", zh: "手机" },
   tablet: { en: "Tablet", zh: "平板电脑" },
   computer: { en: "Computer", zh: "电脑" },
