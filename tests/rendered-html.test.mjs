@@ -446,7 +446,7 @@ test("admin portal groups study names and expands organized, safe, detailed sess
   assert.match(page, /profileMatch/);
   assert.match(
     page,
-    /const STUDY_BUILD_VERSION = "2026-08-09-five-session-commitment-v3"/,
+    /const STUDY_BUILD_VERSION = "2026-08-09-v5-progress-refresh-v4"/,
   );
 
   for (const section of [
