@@ -3,15 +3,17 @@ import type {
   StudySessionRecord,
   StudySessionRecordV3,
   StudySessionRecordV4,
+  StudySessionRecordV5,
 } from "./session-record";
 import { isStudySessionDraftV3, isStudySessionRecordV3 } from "./session-validation.ts";
 import { isStudySessionDraftV4, isStudySessionRecordV4 } from "./session-validation-v4.ts";
+import { isStudySessionDraftV5, isStudySessionRecordV5 } from "./session-validation-v5.ts";
 import {
-  V4_CONDITION_ORDER,
-  isV4ConditionId,
-  type SequencePosition,
-  type V4ConditionId,
-} from "./protocol-v4.ts";
+  V5_CONDITION_ORDER,
+  isV5ConditionId,
+  type V5ConditionId,
+  type V5SequencePosition,
+} from "./protocol-v5.ts";
 import {
   createParticipantPasswordProof,
   createRecoveryProof,
@@ -59,12 +61,18 @@ export type LegacyStoredSessionRecord = CsvSessionRecord & {
   }>;
 };
 
-export type StoredSessionRecord = LegacyStoredSessionRecord | StudySessionRecordV3 | StudySessionRecordV4;
+export type StoredSessionRecord =
+  | LegacyStoredSessionRecord
+  | StudySessionRecordV3
+  | StudySessionRecordV4
+  | StudySessionRecordV5;
 
-export type RemoteStudySession = {
+export type RemoteStudySession = Readonly<{
   record: StoredSessionRecord;
   createdAt: string;
-};
+  updatedAt: string;
+  persistence: "final";
+}>;
 
 export type RemoteStudySessionsResult = {
   sessions: RemoteStudySession[];
@@ -75,9 +83,11 @@ export type ParticipantProfileClaim = LocalParticipantProfile & {
   created: boolean;
 };
 
+export type ProfileConditionId = StudySessionRecordV3["conditionId"] | V5ConditionId;
+
 export type CompletedProfileSession = {
   sessionId: string;
-  conditionId: StudySessionRecordV3["conditionId"];
+  conditionId: ProfileConditionId;
   completedAt: string;
   studyBuildVersion: string | null;
 };
@@ -85,13 +95,13 @@ export type CompletedProfileSession = {
 export type ParticipantProgress = {
   profile: ParticipantProfile;
   completedSessions: CompletedProfileSession[];
-  completedConditionIds: StudySessionRecordV3["conditionId"][];
-  remainingConditionIds: StudySessionRecordV3["conditionId"][];
-  activeProtocolVersion: "overnight-v2";
-  sequenceVersion: "fixed-four-v1";
-  completedSequencePositions: SequencePosition[];
-  nextSequencePosition: SequencePosition | null;
-  nextConditionId: V4ConditionId | null;
+  completedConditionIds: V5ConditionId[];
+  remainingConditionIds: V5ConditionId[];
+  activeProtocolVersion: "overnight-v3";
+  sequenceVersion: "fixed-five-v1";
+  completedSequencePositions: V5SequencePosition[];
+  nextSequencePosition: V5SequencePosition | null;
+  nextConditionId: V5ConditionId | null;
 };
 
 export type ParticipantFeedbackType = "feedback" | "question";
@@ -103,10 +113,10 @@ export type ParticipantFeedbackReceipt = {
 
 export type AdminParticipantProfile = ParticipantProfile & {
   completedSessionCount: number;
-  completedConditionIds: StudySessionRecordV3["conditionId"][];
-  completedSequencePositions: SequencePosition[];
-  nextSequencePosition: SequencePosition | null;
-  nextConditionId: V4ConditionId | null;
+  completedConditionIds: ProfileConditionId[];
+  completedSequencePositions: V5SequencePosition[];
+  nextSequencePosition: V5SequencePosition | null;
+  nextConditionId: V5ConditionId | null;
   feedbackCount: number;
 };
 
@@ -115,7 +125,7 @@ export type AdminParticipantFeedback = {
   profileId: string;
   displayName: string;
   sessionId: string;
-  conditionId: StudySessionRecordV3["conditionId"];
+  conditionId: ProfileConditionId;
   messageType: ParticipantFeedbackType;
   message: string;
   language: "en" | "zh";
@@ -123,6 +133,47 @@ export type AdminParticipantFeedback = {
   studyBuildVersion: string | null;
   createdAt: string;
 };
+
+export type AdminIncompleteStudyStage =
+  | "awaiting-sleep-start"
+  | "awaiting-morning-return"
+  | "awaiting-morning-questionnaire";
+
+/**
+ * A read-only, durable administrator snapshot of an evening session whose
+ * exposure and post-exposure questionnaire are saved but whose morning
+ * questionnaire is still missing. It is deliberately separate from
+ * `RemoteStudySession`, which contains only immutable final submissions.
+ */
+export type AdminIncompleteOvernightDraft = Readonly<{
+  persistence: "incomplete-night";
+  draftId: string;
+  profileId: string;
+  displayName: string;
+  sessionId: string;
+  conditionId: StudySessionRecordV4["conditionId"] | StudySessionRecordV5["conditionId"];
+  sequencePosition: StudySessionRecordV4["sequencePosition"] | StudySessionRecordV5["sequencePosition"];
+  schemaVersion: 4 | 5;
+  studyBuildVersion: string;
+  recordStatus: "active";
+  exposureStatus: "completed";
+  incompleteStage: AdminIncompleteStudyStage;
+  startedAt: string;
+  stimulusEndedAt: string;
+  postExposureAnsweredAt: string;
+  sleepStartedAt: string | null;
+  morningReturnedAt: string | null;
+  morningQuestionnaireSubmitted: false;
+  actualDurationMs: number;
+  firstSavedAt: string;
+  latestSavedAt: string;
+  snapshotCount: number;
+  createdAt: string;
+  updatedAt: string;
+  record: Readonly<StudySessionRecordV4 | StudySessionRecordV5>;
+}>;
+
+export type AdminStudySession = RemoteStudySession | AdminIncompleteOvernightDraft;
 
 export type PaginatedAdminResult<T> = {
   items: T[];
@@ -146,12 +197,13 @@ const ENVIRONMENT_EVENT_TYPES = new Set([
   "fullscreen_entered",
   "fullscreen_exited",
 ]);
-const PROFILE_CONDITIONS = new Set<StudySessionRecordV3["conditionId"]>([
+const PROFILE_CONDITIONS = new Set<ProfileConditionId>([
   "bright-red",
   "dim-red",
   "bright-blue",
   "dim-blue",
   "control",
+  "black-control",
 ]);
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -363,7 +415,10 @@ function isStoredSessionRecordV2(value: unknown): value is LegacyStoredSessionRe
 }
 
 export function isStoredSessionRecord(value: unknown): value is StoredSessionRecord {
-  return isStoredSessionRecordV2(value) || isStudySessionRecordV3(value) || isStudySessionRecordV4(value);
+  return isStoredSessionRecordV2(value) ||
+    isStudySessionRecordV3(value) ||
+    isStudySessionRecordV4(value) ||
+    isStudySessionRecordV5(value);
 }
 
 function apiHeaders(accessToken?: string) {
@@ -389,8 +444,55 @@ async function responseError(response: Response, fallback: string) {
   }
 }
 
-function isProfileCondition(value: unknown): value is StudySessionRecordV3["conditionId"] {
-  return typeof value === "string" && PROFILE_CONDITIONS.has(value as StudySessionRecordV3["conditionId"]);
+function isProfileCondition(value: unknown): value is ProfileConditionId {
+  return typeof value === "string" && PROFILE_CONDITIONS.has(value as ProfileConditionId);
+}
+
+function isEligibleAdminIncompleteRecord(
+  value: unknown,
+): value is StudySessionRecordV4 | StudySessionRecordV5 {
+  if (!(isStudySessionDraftV4(value) || isStudySessionDraftV5(value))) return false;
+  return value.status === "active" &&
+    value.exposureStatus === "completed" &&
+    value.postExposureSurvey !== null &&
+    value.morningSurvey === null;
+}
+
+function incompleteStageForRecord(
+  record: StudySessionRecordV4 | StudySessionRecordV5,
+): AdminIncompleteStudyStage {
+  if (record.sleepStartedAtIso === null) return "awaiting-sleep-start";
+  if (record.morningReturnedAtIso === null) return "awaiting-morning-return";
+  return "awaiting-morning-questionnaire";
+}
+
+function hasValidV5ProgressArrays(value: Record<string, unknown>) {
+  if (
+    !Array.isArray(value.completedConditionIds) ||
+    !value.completedConditionIds.every(isV5ConditionId) ||
+    !Array.isArray(value.remainingConditionIds) ||
+    !value.remainingConditionIds.every(isV5ConditionId) ||
+    !Array.isArray(value.completedSequencePositions) ||
+    !value.completedSequencePositions.every((position) =>
+      Number.isInteger(position) && Number(position) >= 1 && Number(position) <= 5
+    )
+  ) return false;
+
+  const completedConditionIds = value.completedConditionIds;
+  const remainingConditionIds = value.remainingConditionIds;
+  const completedPositions = value.completedSequencePositions.map(Number);
+  if (new Set(completedPositions).size !== completedPositions.length) return false;
+  if (completedConditionIds.length !== completedPositions.length) return false;
+  if (!completedPositions.every((position, index) =>
+    completedConditionIds[index] === V5_CONDITION_ORDER[position - 1]
+  )) return false;
+
+  const completedPositionSet = new Set(completedPositions);
+  const expectedRemaining = V5_CONDITION_ORDER.filter((_condition, index) =>
+    !completedPositionSet.has(index + 1)
+  );
+  return remainingConditionIds.length === expectedRemaining.length &&
+    remainingConditionIds.every((conditionId, index) => conditionId === expectedRemaining[index]);
 }
 
 function isProfileClaimResponse(value: unknown): value is ParticipantProfile & { created: boolean } {
@@ -557,7 +659,7 @@ export async function fetchParticipantProgress(
 ): Promise<ParticipantProgress> {
   const authentication = await profileRpcBody(profile);
   const response = await postAnonymousRpc(
-    "get_participant_progress",
+    "get_participant_progress_v5",
     authentication,
     "The participant progress could not be loaded.",
   );
@@ -576,26 +678,18 @@ export async function fetchParticipantProgress(
       isIsoDate(session.completedAt) &&
       (session.studyBuildVersion === null || typeof session.studyBuildVersion === "string")
     ) ||
-    !Array.isArray(value.completedConditionIds) ||
-    !value.completedConditionIds.every(isProfileCondition) ||
-    !Array.isArray(value.remainingConditionIds) ||
-    !value.remainingConditionIds.every(isProfileCondition) ||
-    value.activeProtocolVersion !== "overnight-v2" ||
-    value.sequenceVersion !== "fixed-four-v1" ||
-    !Array.isArray(value.completedSequencePositions) ||
-    !value.completedSequencePositions.every((position) =>
-      Number.isInteger(position) && Number(position) >= 1 && Number(position) <= 4
-    ) ||
-    new Set(value.completedSequencePositions).size !== value.completedSequencePositions.length ||
+    !hasValidV5ProgressArrays(value) ||
+    value.activeProtocolVersion !== "overnight-v3" ||
+    value.sequenceVersion !== "fixed-five-v1" ||
     !(value.nextSequencePosition === null ||
       (Number.isInteger(value.nextSequencePosition) &&
         Number(value.nextSequencePosition) >= 1 &&
-        Number(value.nextSequencePosition) <= 4)) ||
-    !(value.nextConditionId === null || isV4ConditionId(value.nextConditionId)) ||
+        Number(value.nextSequencePosition) <= 5)) ||
+    !(value.nextConditionId === null || isV5ConditionId(value.nextConditionId)) ||
     ((value.nextSequencePosition === null) !== (value.nextConditionId === null)) ||
     (
       value.nextSequencePosition !== null &&
-      value.nextConditionId !== V4_CONDITION_ORDER[Number(value.nextSequencePosition) - 1]
+      value.nextConditionId !== V5_CONDITION_ORDER[Number(value.nextSequencePosition) - 1]
     )
   ) {
     throw new Error("The participant progress response was not valid.");
@@ -605,11 +699,11 @@ export async function fetchParticipantProgress(
 
 export async function uploadProfileStudySession(
   profile: LocalParticipantProfile,
-  record: StudySessionRecordV3 | StudySessionRecordV4,
+  record: StudySessionRecordV3 | StudySessionRecordV4 | StudySessionRecordV5,
   options: { keepalive?: boolean } = {},
 ) {
   if (
-    !(isStudySessionRecordV3(record) || isStudySessionRecordV4(record)) ||
+    !(isStudySessionRecordV3(record) || isStudySessionRecordV4(record) || isStudySessionRecordV5(record)) ||
     (record.status !== "completed" && record.status !== "terminated") ||
     !record.endedAtIso ||
     record.participantId !== profile.displayName ||
@@ -619,7 +713,10 @@ export async function uploadProfileStudySession(
   }
   const authentication = await profileRpcBody(profile);
   const body = JSON.stringify({ ...authentication, session_payload: record });
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/submit_profile_study_session`, {
+  const functionName = record.schemaVersion === 5
+    ? "submit_profile_study_session_v5"
+    : "submit_profile_study_session";
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${functionName}`, {
     method: "POST",
     headers: {
       ...apiHeaders(),
@@ -745,7 +842,7 @@ export async function saveStudyDraft(
   options: { keepalive?: boolean } = {},
 ) {
   assertResumeToken(resumeToken);
-  if (!(isStudySessionDraftV3(record) || isStudySessionDraftV4(record))) {
+  if (!(isStudySessionDraftV3(record) || isStudySessionDraftV4(record) || isStudySessionDraftV5(record))) {
     throw new Error("The overnight study draft is not valid.");
   }
   const body = JSON.stringify({ resume_token: resumeToken, draft_payload: record });
@@ -778,7 +875,7 @@ export async function loadStudyDraft(resumeToken: string) {
   }
   const payload: unknown = await response.json();
   if (payload === null) return null;
-  if (!(isStudySessionDraftV3(payload) || isStudySessionDraftV4(payload))) {
+  if (!(isStudySessionDraftV3(payload) || isStudySessionDraftV4(payload) || isStudySessionDraftV5(payload))) {
     throw new Error("The stored overnight draft was not valid.");
   }
   return payload;
@@ -786,11 +883,11 @@ export async function loadStudyDraft(resumeToken: string) {
 
 export async function saveParticipantStudyDraft(
   profile: LocalParticipantProfile,
-  record: StudySessionRecordV4,
+  record: StudySessionRecordV4 | StudySessionRecordV5,
   options: { keepalive?: boolean } = {},
 ) {
   if (
-    !isStudySessionDraftV4(record) ||
+    !(isStudySessionDraftV4(record) || isStudySessionDraftV5(record)) ||
     record.participantProfileId !== profile.profileId ||
     record.participantId !== profile.displayName
   ) {
@@ -798,7 +895,10 @@ export async function saveParticipantStudyDraft(
   }
   const authentication = await profileRpcBody(profile);
   const body = JSON.stringify({ ...authentication, draft_payload: record });
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/save_participant_study_draft`, {
+  const functionName = record.schemaVersion === 5
+    ? "save_participant_study_draft_v5"
+    : "save_participant_study_draft";
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${functionName}`, {
     method: "POST",
     headers: { ...apiHeaders(), "Content-Type": "application/json" },
     body,
@@ -818,7 +918,7 @@ export async function loadParticipantStudyDraft(profile: LocalParticipantProfile
   );
   const payload: unknown = await response.json();
   if (payload === null) return null;
-  if (!isStudySessionDraftV4(payload)) {
+  if (!(isStudySessionDraftV4(payload) || isStudySessionDraftV5(payload))) {
     throw new Error("The stored participant draft was not valid.");
   }
   if (
@@ -928,7 +1028,12 @@ export async function fetchRemoteStudySessions(accessToken: string): Promise<Rem
       ) {
         if (!seenSessionIds.has(row.session_id)) {
           seenSessionIds.add(row.session_id);
-          sessions.push({ record: row.payload, createdAt: row.received_at });
+          sessions.push({
+            record: row.payload,
+            createdAt: row.received_at,
+            updatedAt: row.received_at,
+            persistence: "final",
+          });
         }
       } else {
         invalidCount += 1;
@@ -940,6 +1045,124 @@ export async function fetchRemoteStudySessions(accessToken: string): Promise<Rem
 
   sessions.reverse();
   return { sessions, invalidCount };
+}
+
+export async function fetchAdminIncompleteOvernightDrafts(
+  accessToken: string,
+  options: { limit?: number; offset?: number } = {},
+): Promise<PaginatedAdminResult<AdminIncompleteOvernightDraft>> {
+  const requestedLimit = options.limit ?? 500;
+  const requestedOffset = options.offset ?? 0;
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(500, Math.max(1, Math.trunc(requestedLimit)))
+    : 500;
+  const offset = Number.isFinite(requestedOffset)
+    ? Math.max(0, Math.trunc(requestedOffset))
+    : 0;
+  const response = await fetch(
+    `${SUPABASE_URL}/rest/v1/rpc/admin_list_incomplete_study_sessions_v5`,
+    {
+      method: "POST",
+      headers: {
+        ...apiHeaders(accessToken),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ page_size: limit, page_offset: offset }),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(await responseError(
+      response,
+      "Incomplete overnight sessions could not be loaded.",
+    ));
+  }
+
+  const value: unknown = await response.json();
+  if (
+    !isObject(value) ||
+    !Number.isInteger(value.total) ||
+    (value.total as number) < 0 ||
+    !Array.isArray(value.items)
+  ) {
+    throw new Error("The incomplete overnight session list was not valid.");
+  }
+
+  const items: AdminIncompleteOvernightDraft[] = [];
+  const seenSessionIds = new Set<string>();
+  for (const rawItem of value.items) {
+    if (!isObject(rawItem) || !isEligibleAdminIncompleteRecord(rawItem.record)) {
+      throw new Error("The incomplete overnight session list was not valid.");
+    }
+    const record = rawItem.record;
+    const expectedStage = incompleteStageForRecord(record);
+    if (
+      typeof rawItem.profileId !== "string" ||
+      !UUID_PATTERN.test(rawItem.profileId) ||
+      rawItem.profileId !== record.participantProfileId ||
+      typeof rawItem.displayName !== "string" ||
+      rawItem.displayName !== record.participantId ||
+      typeof rawItem.sessionId !== "string" ||
+      !UUID_PATTERN.test(rawItem.sessionId) ||
+      rawItem.sessionId !== record.sessionId ||
+      seenSessionIds.has(rawItem.sessionId) ||
+      rawItem.conditionId !== record.conditionId ||
+      rawItem.sequencePosition !== record.sequencePosition ||
+      rawItem.schemaVersion !== record.schemaVersion ||
+      rawItem.studyBuildVersion !== record.studyBuildVersion ||
+      rawItem.recordStatus !== "active" ||
+      rawItem.exposureStatus !== "completed" ||
+      rawItem.incompleteStage !== expectedStage ||
+      rawItem.startedAt !== record.startedAtIso ||
+      rawItem.stimulusEndedAt !== record.stimulusEndedAtIso ||
+      rawItem.postExposureAnsweredAt !== record.postExposureSurvey.answeredAtIso ||
+      rawItem.sleepStartedAt !== record.sleepStartedAtIso ||
+      rawItem.morningReturnedAt !== record.morningReturnedAtIso ||
+      rawItem.morningQuestionnaireSubmitted !== false ||
+      rawItem.actualDurationMs !== record.actualDurationMs ||
+      typeof rawItem.firstSavedAt !== "string" ||
+      !isIsoDate(rawItem.firstSavedAt) ||
+      typeof rawItem.latestSavedAt !== "string" ||
+      !isIsoDate(rawItem.latestSavedAt) ||
+      Date.parse(rawItem.latestSavedAt) < Date.parse(rawItem.firstSavedAt) ||
+      !Number.isInteger(rawItem.snapshotCount) ||
+      (rawItem.snapshotCount as number) < 1
+    ) {
+      throw new Error("The incomplete overnight session list was not valid.");
+    }
+    seenSessionIds.add(rawItem.sessionId);
+    items.push({
+      persistence: "incomplete-night",
+      draftId: rawItem.sessionId,
+      profileId: rawItem.profileId,
+      displayName: rawItem.displayName,
+      sessionId: rawItem.sessionId,
+      conditionId: record.conditionId,
+      sequencePosition: record.sequencePosition,
+      schemaVersion: record.schemaVersion,
+      studyBuildVersion: record.studyBuildVersion,
+      recordStatus: "active",
+      exposureStatus: "completed",
+      incompleteStage: expectedStage,
+      startedAt: record.startedAtIso,
+      stimulusEndedAt: record.stimulusEndedAtIso,
+      postExposureAnsweredAt: record.postExposureSurvey.answeredAtIso,
+      sleepStartedAt: record.sleepStartedAtIso,
+      morningReturnedAt: record.morningReturnedAtIso,
+      morningQuestionnaireSubmitted: false,
+      actualDurationMs: record.actualDurationMs,
+      firstSavedAt: rawItem.firstSavedAt,
+      latestSavedAt: rawItem.latestSavedAt,
+      snapshotCount: rawItem.snapshotCount as number,
+      createdAt: rawItem.firstSavedAt,
+      updatedAt: rawItem.latestSavedAt,
+      record,
+    });
+  }
+
+  if (items.length > (value.total as number)) {
+    throw new Error("The incomplete overnight session list was not valid.");
+  }
+  return { items, total: value.total as number };
 }
 
 export async function fetchAdminParticipantProfiles(
@@ -954,7 +1177,7 @@ export async function fetchAdminParticipantProfiles(
   const offset = Number.isFinite(requestedOffset)
     ? Math.max(0, Math.trunc(requestedOffset))
     : 0;
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_list_participant_profiles`, {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/admin_list_participant_profiles_v5`, {
     method: "POST",
     headers: {
       ...apiHeaders(accessToken),
@@ -983,18 +1206,18 @@ export async function fetchAdminParticipantProfiles(
       !fields.completedConditionIds.every(isProfileCondition) ||
       !Array.isArray(fields.completedSequencePositions) ||
       !fields.completedSequencePositions.every((position) =>
-        Number.isInteger(position) && Number(position) >= 1 && Number(position) <= 4
+        Number.isInteger(position) && Number(position) >= 1 && Number(position) <= 5
       ) ||
       new Set(fields.completedSequencePositions).size !== fields.completedSequencePositions.length ||
       !(fields.nextSequencePosition === null ||
         (Number.isInteger(fields.nextSequencePosition) &&
           Number(fields.nextSequencePosition) >= 1 &&
-          Number(fields.nextSequencePosition) <= 4)) ||
-      !(fields.nextConditionId === null || isV4ConditionId(fields.nextConditionId)) ||
+          Number(fields.nextSequencePosition) <= 5)) ||
+      !(fields.nextConditionId === null || isV5ConditionId(fields.nextConditionId)) ||
       ((fields.nextSequencePosition === null) !== (fields.nextConditionId === null)) ||
       (
         fields.nextSequencePosition !== null &&
-        fields.nextConditionId !== V4_CONDITION_ORDER[Number(fields.nextSequencePosition) - 1]
+        fields.nextConditionId !== V5_CONDITION_ORDER[Number(fields.nextSequencePosition) - 1]
       )
     ) {
       throw new Error("The participant profile list was not valid.");
