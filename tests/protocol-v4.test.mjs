@@ -505,7 +505,7 @@ test("protocol v3 remains valid and retains standalone reaction rows", () => {
   );
 });
 
-test("participant-facing protocol v4 copy hides the condition order and preserves phase order", async () => {
+test("participant-facing current-protocol copy hides the five-condition order and preserves phase order", async () => {
   const [page, tutorial, surveys, recordTypes] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/study-tutorial.tsx", import.meta.url), "utf8"),
@@ -513,7 +513,7 @@ test("participant-facing protocol v4 copy hides the condition order and preserve
     readFile(new URL("../app/session-record.ts", import.meta.url), "utf8"),
   ]);
 
-  assert.match(page, /Four-session study/);
+  assert.match(page, /Five-session study/);
   assert.match(page, /The condition for each session is assigned automatically/);
   assert.match(page, /no selection is required/);
   assert.match(page, /Test mode only: choose a condition/);
@@ -543,6 +543,12 @@ test("participant-facing protocol v4 copy hides the condition order and preserve
     "固定顺序：暗红 → 暗蓝 → 亮蓝 → 亮红",
     "固定顺序为暗红、暗蓝、亮蓝、亮红",
     "指定顺序：暗红 · 暗蓝 · 亮蓝 · 亮红",
+    "Fixed order: dim red → dim blue → black control → bright blue → bright red",
+    "Fixed order: dim red, dim blue, black control, bright blue, bright red",
+    "Assigned order: dim red · dim blue · black control · bright blue · bright red",
+    "固定顺序：暗红 → 暗蓝 → 黑色 → 亮蓝 → 亮红",
+    "固定顺序为暗红、暗蓝、黑色、亮蓝、亮红",
+    "指定顺序：暗红 · 暗蓝 · 黑色 · 亮蓝 · 亮红",
   ]) {
     assert.doesNotMatch(participantCopy, new RegExp(disclosedOrder));
   }
