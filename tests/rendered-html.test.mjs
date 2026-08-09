@@ -256,7 +256,7 @@ test("server-renders the Sleep Light Study setup page", async () => {
   assert.match(html, /Create account/);
   assert.match(html, /Choose a password/);
   assert.doesNotMatch(html, /email reminder after waking|提醒邮箱/i);
-  assert.match(html, /Four-session study/);
+  assert.match(html, /Five-session study/);
   assert.match(html, /The condition for each session is assigned automatically/);
   assert.match(html, /no selection is required/);
   assert.doesNotMatch(html, /Fixed order: dim red → dim blue → bright blue → bright red/);
@@ -265,6 +265,8 @@ test("server-renders the Sleep Light Study setup page", async () => {
   assert.doesNotMatch(html, /固定顺序：暗红 → 暗蓝 → 亮蓝 → 亮红/);
   assert.doesNotMatch(html, /固定顺序为暗红、暗蓝、亮蓝、亮红/);
   assert.doesNotMatch(html, /指定顺序：暗红 · 暗蓝 · 亮蓝 · 亮红/);
+  assert.doesNotMatch(html, /dim red[^\n]{0,80}dim blue[^\n]{0,80}black[^\n]{0,80}bright blue[^\n]{0,80}bright red/i);
+  assert.doesNotMatch(html, /暗红[^\n]{0,80}暗蓝[^\n]{0,80}黑色[^\n]{0,80}亮蓝[^\n]{0,80}亮红/);
   assert.doesNotMatch(html, /Control — normal sleep/);
   assert.doesNotMatch(html, /name="light-condition"/);
   assert.match(html, /Read tutorial and begin/);
@@ -288,11 +290,13 @@ test("includes attention, pause, termination, and logging controls", async () =>
   assert.match(studyData, /"session_summary"/);
   assert.match(page, /finishExposureRef\.current\("terminated"\)/);
   assert.match(page, /className="session-countdown"/);
-  assert.match(page, /schemaVersion: 4/);
+  assert.match(page, /schemaVersion: 5/);
   assert.match(page, /export function makeTrialPlan\(count = 4\)/);
   assert.match(page, /plannedOnsetMs \+= randomBetween\(50000, 70000\)/);
   assert.match(page, /const ACTIVE_CONDITIONS = CONDITIONS\.filter/);
-  assert.match(page, /V4_CONDITION_ORDER as readonly string\[\]/);
+  assert.match(page, /V5_CONDITION_ORDER as readonly string\[\]/);
+  assert.match(page, /attentionCrossColorHex/);
+  assert.match(page, /"--attention-cross-color"/);
   assert.match(page, /sleepStartedAtIso/);
   assert.match(page, /PostExposureSurveyForm/);
   assert.match(page, /MorningSurveyForm/);
@@ -335,6 +339,8 @@ test("detects touch capability and preserves separate touch and keyboard control
   assert.match(styles, /\.touch-session-controls\s*\{[\s\S]*position:\s*fixed;/);
   assert.match(styles, /env\(safe-area-inset-bottom/);
   assert.match(styles, /\.touch-session-controls button\s*\{[\s\S]*min-height:\s*48px/);
+  assert.match(page, /stimulus\.id === "black-control" \? "black-control"/);
+  assert.match(styles, /\.stimulus-screen\.black-control \.attention-cross\s*\{\s*filter:\s*none;/);
 
   const keyboardStart = page.indexOf("const onKeyDown");
   const keyboardEnd = page.indexOf('window.addEventListener("keydown"', keyboardStart);
@@ -381,10 +387,14 @@ test("supports bilingual tutorials, password accounts, isolated practice, append
   assert.match(tutorial, /The condition for each session is assigned automatically/);
   assert.match(tutorial, /completedCount/);
   assert.match(tutorial, /remainingCount/);
-  assert.match(tutorial, /<strong>黑色十字<\/strong>/);
+  assert.match(tutorial, /attentionCrossLabel|crossLabel/);
   assert.match(tutorial, /Practice is not saved and does not count toward the results/);
   assert.match(practice, /Practice — not recorded/);
   assert.match(practice, /background: "#202329"/);
+  assert.match(practice, /attentionCrossColor === "gray"/);
+  assert.match(practice, /replaceAll\("黑色十字", "灰色十字"\)/);
+  assert.match(practice, /const crossHex = attentionCrossColor === "gray" \? "#808080" : "#000000"/);
+  assert.match(page, /attentionCrossColor=\{conditionId === "black-control" \? "gray" : "black"\}/);
   assert.match(practice, /stage !== "prompt-end"/);
   assert.doesNotMatch(practice, /localStorage|sessionStorage|fetch\(|Supabase|saveStudyDraft|registerResponse/);
   assert.match(feedback, /Questions or feedback/);
@@ -406,13 +416,27 @@ test("supports bilingual tutorials, password accounts, isolated practice, append
   assert.doesNotMatch(page, /scheduleReminderForRecord|Reminder email|提醒邮箱|REMINDER_CRON_SECRET/);
 });
 
-test("admin portal expands organized, safe, detailed session results", async () => {
-  const [page, details] = await Promise.all([
+test("admin portal groups study names and expands organized, safe, detailed session results", async () => {
+  const [page, details, groups, styles] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/admin-session-details.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin-session-groups.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
 
   assert.match(page, /AdminSessionDetails/);
+  assert.match(page, /groupAdminSessionsByParticipant/);
+  assert.match(page, /participantSessionGroups\.map/);
+  assert.match(page, /allParticipantGroupByName/);
+  assert.match(page, /expandedParticipantNames/);
+  assert.match(page, /className="admin-participant-group-row"/);
+  assert.match(page, /participantGroup\.sessions\.map/);
+  assert.doesNotMatch(page, /filteredSessions\.map/);
+  assert.match(groups, /normalizeParticipantName\(session\.record\.participantId\)/);
+  assert.match(groups, /const groups = new Map/);
+  assert.match(groups, /existing\.sessions\.push\(session\)/);
+  assert.match(styles, /\.admin-participant-summary\s*\{/);
+  assert.match(styles, /\.admin-session-row\s*>\s*td/);
   assert.match(page, /expandedSessionId/);
   assert.match(page, /aria-expanded=\{isExpanded\}/);
   assert.match(page, /aria-controls=\{detailsId\}/);
@@ -422,7 +446,7 @@ test("admin portal expands organized, safe, detailed session results", async () 
   assert.match(page, /profileMatch/);
   assert.match(
     page,
-    /const STUDY_BUILD_VERSION = "2026-08-04-professional-zh-blinded-order-v1"/,
+    /const STUDY_BUILD_VERSION = "2026-08-09-five-session-commitment-v3"/,
   );
 
   for (const section of [
