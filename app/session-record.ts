@@ -11,6 +11,10 @@ import type {
   SequencePosition,
   V4ConditionId,
 } from "./protocol-v4";
+import type {
+  V5ConditionId,
+  V5SequencePosition,
+} from "./protocol-v5";
 
 export type SessionStatus = "active" | "completed" | "terminated";
 export type ExposureStatus =
@@ -154,10 +158,58 @@ export type StudySessionRecordV4 = {
   environmentEvents: EnvironmentEvent[];
 };
 
-export type StudySessionRecord = StudySessionRecordV3 | StudySessionRecordV4;
+export type StudySessionRecordV5 = {
+  schemaVersion: 5;
+  protocolVersion: "overnight-v3";
+  sequenceVersion: "fixed-five-v1";
+  sequencePosition: V5SequencePosition;
+  attentionProtocolVersion: "sparse-4-50-70-v1";
+  sessionId: string;
+  participantId: string;
+  participantProfileId: string;
+  studyBuildVersion: string;
+  conditionId: V5ConditionId;
+  conditionName: string;
+  stimulusColorHex: string;
+  stimulusColorRgb: string;
+  attentionCrossColorHex: string;
+  attentionCrossColorRgb: string;
+  plannedDurationMs: number;
+  plannedEndAtIso: string | null;
+  actualDurationMs: number;
+  wallClockDurationMs: number;
+  totalPausedDurationMs: number;
+  crossVisibleMs: number;
+  startedAtIso: string;
+  stimulusStartedAtIso: string | null;
+  stimulusEndedAtIso: string | null;
+  sleepStartedAtIso: string | null;
+  morningReturnedAtIso: string | null;
+  assessmentCompletedAtIso: string | null;
+  endedAtIso: string | null;
+  status: SessionStatus;
+  exposureStatus: Exclude<ExposureStatus, "not-applicable">;
+  terminationReason: "end_sequence" | "touch_end" | "page_reload" | null;
+  fullscreenAtStart: boolean;
+  fullscreenRequestFailed: boolean;
+  deviceInfo: SessionDeviceInfo;
+  preSurvey: PreStudySurvey;
+  postExposureSurvey: PostExposureSurvey | null;
+  morningSurvey: MorningStudySurvey | null;
+  trialPlan: PlannedTrial[];
+  trials: TrialRecord[];
+  falseClicks: FalseClickRecord[];
+  pauses: PauseRecord[];
+  environmentEvents: EnvironmentEvent[];
+};
+
+export type StudySessionRecord =
+  | StudySessionRecordV3
+  | StudySessionRecordV4
+  | StudySessionRecordV5;
 
 export type LocalOvernightDraft = {
-  storageVersion: 1 | 2;
+  storageVersion: 1 | 2 | 3;
   resumeToken: string;
   record: StudySessionRecord;
 };

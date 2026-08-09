@@ -147,15 +147,35 @@ test("condition history counts repeats but does not treat interrupted exposure a
     { schemaVersion: 2, status: "completed", conditionId: "bright-blue" },
   ]);
   assert.deepEqual(history.completedConditions, ["bright-red", "control"]);
-  assert.deepEqual(history.remainingConditions, ["dim-red", "bright-blue", "dim-blue"]);
+  assert.deepEqual(history.remainingConditions, ["dim-red", "dim-blue", "black-control", "bright-blue"]);
   assert.deepEqual(history.completedSessionCountByCondition, {
     "bright-red": 2,
     "dim-red": 0,
     "bright-blue": 0,
     "dim-blue": 0,
     control: 1,
+    "black-control": 0,
   });
   assert.equal("nextCondition" in history, false);
+});
+
+test("history and consistency review keep legacy normal-sleep control separate from v5 black-screen control", () => {
+  const legacyControl = makeSession({
+    conditionId: "control",
+    exposureStatus: "not-applicable",
+  });
+  const blackScreenControl = makeSession({
+    schemaVersion: 5,
+    conditionId: "black-control",
+    exposureStatus: "completed",
+  });
+  const history = summarizeConditionHistory([legacyControl, blackScreenControl]);
+
+  assert.deepEqual(history.completedConditions, ["control", "black-control"]);
+  assert.equal(history.completedSessionCountByCondition.control, 1);
+  assert.equal(history.completedSessionCountByCondition["black-control"], 1);
+  assert.equal(history.remainingConditions.includes("black-control"), false);
+  assert.equal(reviewParticipantConsistency([legacyControl, blackScreenControl]).completedSessionCount, 2);
 });
 
 test("grouping joins case variants without mutating historical records", () => {

@@ -6,7 +6,7 @@ import { KSS_OPTIONS, type DeviceInfo } from "./protocol-v3";
 import type {
   AdminParticipantFeedback,
   AdminParticipantProfile,
-  RemoteStudySession,
+  AdminStudySession,
 } from "./remote-storage";
 import type { Language } from "./i18n";
 
@@ -14,7 +14,13 @@ type ProfileMatch = "profile-id" | "normalized-name" | "none";
 
 type AdminSessionDetailsProps = {
   language: Language;
-  session: RemoteStudySession;
+  session: AdminStudySession;
+  incompleteCheckpoint?: {
+    firstSavedAt: string;
+    latestSavedAt: string;
+    snapshotCount: number;
+    incompleteStage: string;
+  } | null;
   profile: AdminParticipantProfile | null;
   profileMatch: ProfileMatch;
   feedback: AdminParticipantFeedback[];
@@ -167,9 +173,28 @@ function conditionLabel(conditionId: string, language: Language) {
     "dim-red": ["Dim red", "暗红色"],
     "bright-blue": ["Bright blue", "亮蓝色"],
     "dim-blue": ["Dim blue", "暗蓝色"],
+    "black-control": ["Black-screen control", "黑屏对照条件"],
     control: ["Control — normal sleep", "对照组——正常睡眠"],
   };
   return labels[conditionId]?.[language === "zh" ? 1 : 0] ?? conditionId;
+}
+
+function incompleteStageLabel(stage: string, language: Language) {
+  const labels: Record<string, [string, string]> = {
+    "awaiting-sleep-start": [
+      "Evening measures saved; sleep start not yet marked",
+      "夜间测量已保存，尚未标记开始睡眠",
+    ],
+    "awaiting-morning-return": [
+      "Awaiting the participant's return after waking",
+      "等待参与者醒来后返回网页",
+    ],
+    "awaiting-morning-questionnaire": [
+      "Morning return recorded; questionnaire not submitted",
+      "已记录早晨返回，问卷尚未提交",
+    ],
+  };
+  return labels[stage]?.[language === "zh" ? 1 : 0] ?? stage;
 }
 
 function DetailGrid({ items }: { items: DetailItem[] }) {
@@ -262,6 +287,7 @@ function DeviceDetails({ device, language }: { device: DeviceInfo | null; langua
 export function AdminSessionDetails({
   language,
   session,
+  incompleteCheckpoint = null,
   profile,
   profileMatch,
   feedback,
@@ -272,7 +298,10 @@ export function AdminSessionDetails({
   const record = session.record;
   const v3 = record.schemaVersion === 3 ? record : null;
   const v4 = record.schemaVersion === 4 ? record : null;
-  const modern = v4 ?? v3;
+  const v5 = record.schemaVersion === 5 ? record : null;
+  const currentProtocol = v5 ?? v4;
+  const modern = currentProtocol ?? v3;
+  const legacyNormalSleepControl = record.schemaVersion === 3 && record.conditionId === "control";
   const hits = record.trials.filter((trial) => trial.status === "hit").length;
   const misses = record.trials.filter((trial) => trial.status === "missed").length;
   const omitted = record.trials.filter((trial) => trial.status === "omitted").length;
@@ -292,7 +321,8 @@ export function AdminSessionDetails({
           exposureReactionTimes[exposureReactionTimes.length / 2]
         ) / 2
     : null;
-  const sectionNumber = (legacyNumber: number) => v4 ? legacyNumber + 1 : legacyNumber;
+  const sectionNumber = (legacyNumber: number) => currentProtocol ? legacyNumber + 1 : legacyNumber;
+  const awaitingMorning = incompleteCheckpoint !== null;
 
   const attentionColumns: TableColumn<(typeof record.trials)[number]>[] = [
     { key: "number", label: "#", render: (trial) => trial.trialNumber },
@@ -310,7 +340,9 @@ export function AdminSessionDetails({
     <div className="admin-session-details">
       <div className="admin-detail-heading">
         <div>
-          <span>{tr(language, "Detailed session results", "单次实验详细结果")}</span>
+          <span>{awaitingMorning
+            ? tr(language, "Saved incomplete night", "已保存的未完成夜间记录")
+            : tr(language, "Detailed session results", "单次实验详细结果")}</span>
           <h2>{record.participantId} · {conditionLabel(record.conditionId, language)}</h2>
           <code>{record.sessionId}</code>
         </div>
@@ -320,11 +352,35 @@ export function AdminSessionDetails({
         </div>
       </div>
 
+      {awaitingMorning ? (
+        <aside className="admin-incomplete-record-notice" role="status">
+          <strong>{tr(language, "Awaiting morning questionnaire", "待完成晨间问卷")}</strong>
+          <p>{tr(
+            language,
+            "The five-minute exposure and immediate post-exposure measure are saved. This durable checkpoint is visible for review, but it is not a completed session and does not advance the participant's completed progress.",
+            "五分钟屏幕暴露和观看后即时测量均已保存。这是一条可供复核的持久检查点，但尚不属于已完成实验，也不会增加参与者的已完成进度。",
+          )}</p>
+        </aside>
+      ) : null}
+
       <DetailSection title={tr(language, "1. Record and profile", "1. 记录与姓名档案")}>
         <DetailGrid items={[
           { label: tr(language, "Study name", "实验姓名"), value: record.participantId },
           { label: tr(language, "Session ID", "实验编号"), value: <code>{record.sessionId}</code> },
-          { label: tr(language, "Database received", "数据库接收时间"), value: exactDate(session.createdAt, language) },
+          { label: awaitingMorning
+            ? tr(language, "Latest checkpoint saved", "最近检查点保存时间")
+            : tr(language, "Database received", "数据库接收时间"), value: exactDate(
+              awaitingMorning ? session.updatedAt : session.createdAt,
+              language,
+            ) },
+          ...(incompleteCheckpoint ? [
+            { label: tr(language, "First checkpoint saved", "首次检查点保存时间"), value: exactDate(incompleteCheckpoint.firstSavedAt, language) },
+            { label: tr(language, "Saved snapshots", "已保存快照数"), value: incompleteCheckpoint.snapshotCount },
+            { label: tr(language, "Incomplete stage", "未完成阶段"), value: incompleteStageLabel(incompleteCheckpoint.incompleteStage, language) },
+            { label: tr(language, "Persistence state", "记录保存状态"), value: tr(language, "Incomplete night — awaiting morning questionnaire", "夜间部分已保存——待完成晨间问卷") },
+          ] : [
+            { label: tr(language, "Persistence state", "记录保存状态"), value: tr(language, "Final session record", "最终实验记录") },
+          ]),
           { label: tr(language, "Schema version", "数据结构版本"), value: `v${record.schemaVersion}` },
           { label: tr(language, "Profile link", "档案关联方式"), value: profileMatch === "profile-id" ? tr(language, "Exact profile ID", "精确档案 ID") : profileMatch === "normalized-name" ? tr(language, "Historical normalized-name match", "历史姓名规范化匹配") : tr(language, "No linked profile", "没有关联档案") },
           { label: tr(language, "Participant profile ID", "参与者档案 ID"), value: modern?.participantProfileId ? <code>{modern.participantProfileId}</code> : tr(language, "Not collected in schema v2 / older record", "Schema v2／旧记录未收集") },
@@ -333,24 +389,34 @@ export function AdminSessionDetails({
           { label: tr(language, "Profile last accessed", "档案最近访问"), value: profile ? exactDate(profile.lastAccessedAt, language) : "—" },
           { label: tr(language, "Completed sessions", "已完成实验次数"), value: profile?.completedSessionCount ?? "—" },
           { label: tr(language, "Completed conditions", "已完成条件"), value: profile ? (profile.completedConditionIds.length ? profile.completedConditionIds.map((id) => conditionLabel(id, language)).join(" · ") : tr(language, "None", "无")) : "—" },
-          { label: tr(language, "Current protocol progress", "当前版本进度"), value: profile ? `${profile.completedSequencePositions.length} / 4` : "—" },
+          { label: tr(language, "Current protocol progress", "当前版本进度"), value: profile ? `${profile.completedSequencePositions.length} / 5` : "—" },
           { label: tr(language, "Profile feedback count", "档案反馈数量"), value: profile?.feedbackCount ?? "—" },
         ]} />
       </DetailSection>
 
-      <DetailSection title={tr(language, "2. Condition and exposure", "2. 条件与光照")}>
+      <DetailSection title={tr(language, "2. Condition and exposure", "2. 条件与观看阶段")}>
         <DetailGrid items={[
           { label: tr(language, "Condition", "实验条件"), value: `${conditionLabel(record.conditionId, language)} (${record.conditionId})` },
           { label: tr(language, "Stored condition name", "保存的条件名称"), value: record.conditionName },
           { label: tr(language, "Color hex", "颜色 Hex"), value: record.stimulusColorHex ?? tr(language, "— (null)", "—（空值）") },
           { label: tr(language, "Color RGB", "颜色 RGB"), value: record.stimulusColorRgb ?? tr(language, "— (null)", "—（空值）") },
-          { label: tr(language, "Session status", "实验状态"), value: localizedCode(record.status, language) },
-          { label: tr(language, "Exposure status", "光照状态"), value: modern ? localizedCode(modern.exposureStatus, language) : tr(language, "Not collected in schema v2", "Schema v2 未收集") },
+          ...(v5 ? [
+            { label: tr(language, "Attention-cross color hex", "注意十字颜色 Hex"), value: v5.attentionCrossColorHex },
+            { label: tr(language, "Attention-cross color RGB", "注意十字颜色 RGB"), value: v5.attentionCrossColorRgb },
+          ] : []),
+          { label: tr(language, "Session status", "实验状态"), value: awaitingMorning
+            ? tr(language, "Awaiting morning questionnaire (not completed)", "待完成晨间问卷（尚未完成）")
+            : localizedCode(record.status, language) },
+          { label: tr(language, "Exposure status", "观看阶段状态"), value: modern ? localizedCode(modern.exposureStatus, language) : tr(language, "Not collected in schema v2", "Schema v2 未收集") },
           { label: tr(language, "Termination reason", "终止原因"), value: localizedCode(record.terminationReason, language) },
           { label: tr(language, "Fullscreen at start", "开始时全屏"), value: booleanLabel(record.fullscreenAtStart, language) },
           { label: tr(language, "Fullscreen request failed", "全屏请求失败"), value: booleanLabel(record.fullscreenRequestFailed, language) },
           { label: tr(language, "Protocol version", "实验协议版本"), value: modern?.protocolVersion ?? tr(language, "Not collected in schema v2", "Schema v2 未收集") },
-          { label: tr(language, "Sequence version / position", "顺序版本／位置"), value: v4 ? `${v4.sequenceVersion} · ${v4.sequencePosition}/4` : tr(language, "Not used in this version", "此版本未使用") },
+          { label: tr(language, "Sequence version / position", "顺序版本／位置"), value: v5
+            ? `${v5.sequenceVersion} · ${v5.sequencePosition}/5`
+            : v4
+              ? `${v4.sequenceVersion} · ${v4.sequencePosition}/4`
+              : tr(language, "Not used in this version", "此版本未使用") },
           { label: tr(language, "Attention protocol", "注意任务版本"), value: modern?.attentionProtocolVersion ?? tr(language, "Not collected in schema v2", "Schema v2 未收集") },
         ]} />
       </DetailSection>
@@ -358,75 +424,83 @@ export function AdminSessionDetails({
       <DetailSection title={tr(language, "3. Timeline and durations", "3. 时间线与时长")}>
         <DetailGrid items={[
           { label: tr(language, "Session started", "实验开始"), value: exactDate(record.startedAtIso, language) },
-          { label: tr(language, "Stimulus started", "光照开始"), value: modern ? exactDate(modern.stimulusStartedAtIso, language) : tr(language, "Not collected in schema v2", "Schema v2 未收集") },
+          { label: tr(language, "Stimulus started", "观看阶段开始"), value: modern ? exactDate(modern.stimulusStartedAtIso, language) : tr(language, "Not collected in schema v2", "Schema v2 未收集") },
           { label: tr(language, "Planned end", "计划结束"), value: exactDate(record.plannedEndAtIso, language) },
-          { label: tr(language, "Stimulus ended", "光照结束"), value: modern ? exactDate(modern.stimulusEndedAtIso, language) : tr(language, "Not collected in schema v2", "Schema v2 未收集") },
+          { label: tr(language, "Stimulus ended", "观看阶段结束"), value: modern ? exactDate(modern.stimulusEndedAtIso, language) : tr(language, "Not collected in schema v2", "Schema v2 未收集") },
           { label: tr(language, "Sleep marked", "标记入睡"), value: modern ? exactDate(modern.sleepStartedAtIso, language) : tr(language, "Not collected in schema v2", "Schema v2 未收集") },
           { label: tr(language, "Morning return", "早晨返回"), value: modern ? exactDate(modern.morningReturnedAtIso, language) : tr(language, "Not collected in schema v2", "Schema v2 未收集") },
           { label: tr(language, "Assessment completed", "评估完成"), value: modern ? exactDate(modern.assessmentCompletedAtIso, language) : tr(language, "Not collected in schema v2", "Schema v2 未收集") },
           { label: tr(language, "Session ended", "实验结束"), value: exactDate(record.endedAtIso, language) },
           { label: tr(language, "Planned duration", "计划时长"), value: formatDuration(record.plannedDurationMs, language) },
-          { label: tr(language, "Active exposure duration", "有效光照时长"), value: formatDuration(record.actualDurationMs, language) },
+          { label: tr(language, "Active exposure duration", "有效观看时长"), value: formatDuration(record.actualDurationMs, language) },
           { label: tr(language, "Wall-clock duration", "墙钟时长"), value: formatDuration(record.wallClockDurationMs, language) },
           { label: tr(language, "Total paused", "暂停总时长"), value: formatDuration(record.totalPausedDurationMs, language) },
           { label: tr(language, "Cross visible duration", "十字显示时长"), value: formatDuration(record.crossVisibleMs, language) },
         ]} />
       </DetailSection>
 
-      {v4 ? (
+      {currentProtocol ? (
         <>
-          <DetailSection title={tr(language, "4. Before-exposure questionnaire", "4. 光照前问卷")}>
+          <DetailSection title={tr(language, "4. Before-exposure questionnaire", "4. 观看前问卷")}>
             <DetailGrid items={[
-              { label: tr(language, "Questionnaire version", "问卷版本"), value: v4.preSurvey.questionnaireVersion },
-              { label: tr(language, "Answered", "回答时间"), value: exactDate(v4.preSurvey.answeredAtIso, language) },
-              { label: tr(language, "Previous-night sleep time", "之前入睡时间"), value: <code>{v4.preSurvey.previousNightSleepTime}</code> },
-              { label: tr(language, "Pre-exposure Karolinska Sleepiness Scale", "光照前卡罗林斯卡困倦量表"), value: kssLabel(v4.preSurvey.sleepinessKss, language) },
-              { label: tr(language, "Screen use before session", "实验前使用电子产品"), value: localizedCode(v4.preSurvey.screenUseBeforeSleep, language) },
-              { label: tr(language, "Screen-use duration", "电子产品使用时长"), value: v4.preSurvey.screenUseMinutes === null ? tr(language, "— (null)", "—（空值）") : `${v4.preSurvey.screenUseMinutes} ${tr(language, "minutes", "分钟")}` },
-              { label: tr(language, "Plans to sleep with a light", "计划开灯睡觉"), value: localizedCode(v4.preSurvey.sleepsWithLight, language) },
-              { label: tr(language, "Sleep-light color", "睡眠灯颜色"), value: localizedCode(v4.preSurvey.sleepLightColor, language) },
-              { label: tr(language, "Sleep temperature", "睡眠环境温度"), value: localizedCode(v4.preSurvey.sleepTemperature, language) },
-              { label: tr(language, "Sleep aid / supplement", "睡眠辅助药品／保健品"), value: localizedCode(v4.preSurvey.sleepAidMedicationOrSupplement, language) },
-              { label: tr(language, "Previous-morning restedness", "之前早晨恢复感"), value: restednessLabel(v4.preSurvey.morningRestedness, language) },
-              { label: tr(language, "Previous sleep quality", "之前睡眠质量"), value: sleepQualityLabel(v4.preSurvey.previousNightSleepQuality, language) },
-              { label: tr(language, "Caffeine in past 8 hours", "过去 8 小时摄入咖啡因"), value: localizedCode(v4.preSurvey.caffeineInPast8Hours, language) },
-              { label: tr(language, "Music before sleep", "睡前播放音乐"), value: localizedCode(v4.preSurvey.musicBeforeSleep, language) },
-              { label: tr(language, "Sleep-environment noise", "睡眠环境噪音"), value: localizedCode(v4.preSurvey.sleepNoiseLevel, language) },
-              { label: tr(language, "Vigorous exercise in past 12 hours", "过去 12 小时剧烈运动"), value: localizedCode(v4.preSurvey.vigorousExerciseInPast12Hours, language) },
+              { label: tr(language, "Questionnaire version", "问卷版本"), value: currentProtocol.preSurvey.questionnaireVersion },
+              { label: tr(language, "Answered", "回答时间"), value: exactDate(currentProtocol.preSurvey.answeredAtIso, language) },
+              { label: tr(language, "Previous-night sleep time", "之前入睡时间"), value: <code>{currentProtocol.preSurvey.previousNightSleepTime}</code> },
+              { label: tr(language, "Pre-exposure Karolinska Sleepiness Scale", "观看前卡罗林斯卡困倦量表"), value: kssLabel(currentProtocol.preSurvey.sleepinessKss, language) },
+              { label: tr(language, "Screen use before session", "实验前使用电子产品"), value: localizedCode(currentProtocol.preSurvey.screenUseBeforeSleep, language) },
+              { label: tr(language, "Screen-use duration", "电子产品使用时长"), value: currentProtocol.preSurvey.screenUseMinutes === null ? tr(language, "— (null)", "—（空值）") : `${currentProtocol.preSurvey.screenUseMinutes} ${tr(language, "minutes", "分钟")}` },
+              { label: tr(language, "Plans to sleep with a light", "计划开灯睡觉"), value: localizedCode(currentProtocol.preSurvey.sleepsWithLight, language) },
+              { label: tr(language, "Sleep-light color", "睡眠灯颜色"), value: localizedCode(currentProtocol.preSurvey.sleepLightColor, language) },
+              { label: tr(language, "Sleep temperature", "睡眠环境温度"), value: localizedCode(currentProtocol.preSurvey.sleepTemperature, language) },
+              { label: tr(language, "Sleep aid / supplement", "睡眠辅助药品／保健品"), value: localizedCode(currentProtocol.preSurvey.sleepAidMedicationOrSupplement, language) },
+              { label: tr(language, "Previous-morning restedness", "之前早晨恢复感"), value: restednessLabel(currentProtocol.preSurvey.morningRestedness, language) },
+              { label: tr(language, "Previous sleep quality", "之前睡眠质量"), value: sleepQualityLabel(currentProtocol.preSurvey.previousNightSleepQuality, language) },
+              { label: tr(language, "Caffeine in past 8 hours", "过去 8 小时摄入咖啡因"), value: localizedCode(currentProtocol.preSurvey.caffeineInPast8Hours, language) },
+              { label: tr(language, "Music before sleep", "睡前播放音乐"), value: localizedCode(currentProtocol.preSurvey.musicBeforeSleep, language) },
+              { label: tr(language, "Sleep-environment noise", "睡眠环境噪音"), value: localizedCode(currentProtocol.preSurvey.sleepNoiseLevel, language) },
+              { label: tr(language, "Vigorous exercise in past 12 hours", "过去 12 小时剧烈运动"), value: localizedCode(currentProtocol.preSurvey.vigorousExerciseInPast12Hours, language) },
             ]} />
           </DetailSection>
 
-          <DetailSection title={tr(language, "5. Immediate post-exposure measure", "5. 光照后即时测量")}>
-            {v4.postExposureSurvey ? <DetailGrid items={[
-              { label: tr(language, "Questionnaire version", "问卷版本"), value: v4.postExposureSurvey.questionnaireVersion },
-              { label: tr(language, "Answered", "回答时间"), value: exactDate(v4.postExposureSurvey.answeredAtIso, language) },
-              { label: tr(language, "Post-exposure Karolinska Sleepiness Scale", "光照后卡罗林斯卡困倦量表"), value: kssLabel(v4.postExposureSurvey.sleepinessKss, language) },
-              { label: tr(language, "Change from pre-exposure", "相对光照前变化"), value: v4.postExposureSurvey.sleepinessKss - v4.preSurvey.sleepinessKss },
-            ]} /> : <p className="admin-detail-empty">{tr(language, "Not yet completed.", "尚未完成。")}</p>}
+          <DetailSection title={tr(language, "5. Immediate post-exposure measure", "5. 观看后即时测量")}>
+            {currentProtocol.postExposureSurvey ? <DetailGrid items={[
+              { label: tr(language, "Questionnaire version", "问卷版本"), value: currentProtocol.postExposureSurvey.questionnaireVersion },
+              { label: tr(language, "Answered", "回答时间"), value: exactDate(currentProtocol.postExposureSurvey.answeredAtIso, language) },
+              { label: tr(language, "Post-exposure Karolinska Sleepiness Scale", "观看后卡罗林斯卡困倦量表"), value: kssLabel(currentProtocol.postExposureSurvey.sleepinessKss, language) },
+              { label: tr(language, "Change from pre-exposure", "相对观看前变化"), value: currentProtocol.postExposureSurvey.sleepinessKss - currentProtocol.preSurvey.sleepinessKss },
+            ]} /> : <p className="admin-detail-empty">{awaitingMorning
+              ? tr(language, "Awaiting the participant's next-morning questionnaire. Evening data above remain saved and visible.", "正在等待参与者填写晨间问卷；上方夜间数据已保存并可供查看。")
+              : tr(language, "Not yet completed.", "尚未完成。")}</p>}
           </DetailSection>
 
           <DetailSection title={tr(language, "6. Next-morning questionnaire", "6. 第二天早晨问卷")}>
-            {v4.morningSurvey ? <DetailGrid items={[
-              { label: tr(language, "Questionnaire version", "问卷版本"), value: v4.morningSurvey.questionnaireVersion },
-              { label: tr(language, "Answered", "回答时间"), value: exactDate(v4.morningSurvey.answeredAtIso, language) },
-              { label: tr(language, "Attempted sleep time", "尝试入睡时间"), value: <code>{v4.morningSurvey.attemptedSleepTime}</code> },
-              { label: tr(language, "Wake time", "起床时间"), value: <code>{v4.morningSurvey.wakeTime}</code> },
-              { label: tr(language, "Remembered awakenings", "记得的夜间醒来次数"), value: v4.morningSurvey.awakenings },
-              { label: tr(language, "Sleep quality", "睡眠质量"), value: sleepQualityLabel(v4.morningSurvey.sleepQuality, language) },
-              { label: tr(language, "Restedness", "恢复感"), value: restednessLabel(v4.morningSurvey.restedness, language) },
-              { label: tr(language, "Morning alertness", "早晨清醒程度"), value: `${v4.morningSurvey.alertness} / 5` },
-              { label: tr(language, "Unusual factors", "异常情况"), value: localizedCode(v4.morningSurvey.unusualFactors, language) },
-              { label: tr(language, "Unusual-factor note", "异常情况说明"), value: v4.morningSurvey.unusualFactorsNote ?? tr(language, "— (null)", "—（空值）") },
+            {currentProtocol.morningSurvey ? <DetailGrid items={[
+              { label: tr(language, "Questionnaire version", "问卷版本"), value: currentProtocol.morningSurvey.questionnaireVersion },
+              { label: tr(language, "Answered", "回答时间"), value: exactDate(currentProtocol.morningSurvey.answeredAtIso, language) },
+              { label: tr(language, "Attempted sleep time", "尝试入睡时间"), value: <code>{currentProtocol.morningSurvey.attemptedSleepTime}</code> },
+              { label: tr(language, "Wake time", "起床时间"), value: <code>{currentProtocol.morningSurvey.wakeTime}</code> },
+              { label: tr(language, "Remembered awakenings", "记得的夜间醒来次数"), value: currentProtocol.morningSurvey.awakenings },
+              { label: tr(language, "Sleep quality", "睡眠质量"), value: sleepQualityLabel(currentProtocol.morningSurvey.sleepQuality, language) },
+              { label: tr(language, "Restedness", "恢复感"), value: restednessLabel(currentProtocol.morningSurvey.restedness, language) },
+              { label: tr(language, "Morning alertness", "早晨清醒程度"), value: `${currentProtocol.morningSurvey.alertness} / 5` },
+              { label: tr(language, "Unusual factors", "异常情况"), value: localizedCode(currentProtocol.morningSurvey.unusualFactors, language) },
+              { label: tr(language, "Unusual-factor note", "异常情况说明"), value: currentProtocol.morningSurvey.unusualFactorsNote ?? tr(language, "— (null)", "—（空值）") },
             ]} /> : <p className="admin-detail-empty">{tr(language, "Not yet completed.", "尚未完成。")}</p>}
           </DetailSection>
 
           <DetailSection title={tr(language, "7. Reaction time source and devices", "7. 反应时间来源与设备")}>
             <p className="admin-detail-history-note">
-              {tr(
-                language,
-                "Protocol v4 intentionally has no separate reaction-time test. Reaction time is derived from hit trials during the five-minute screen exposure.",
-                "Protocol v4 特意取消独立反应时间测试；反应时间来自五分钟屏幕暴露期间成功回应的十字试次。",
-              )}
+              {currentProtocol.schemaVersion === 5
+                ? tr(
+                    language,
+                    "Protocol v5 intentionally has no separate reaction-time test. Reaction time is derived from hit trials during the five-minute screen exposure.",
+                    "Protocol v5 不设置独立反应时间测试；反应时间来自五分钟屏幕暴露期间成功回应的十字试次。",
+                  )
+                : tr(
+                    language,
+                    "Protocol v4 intentionally has no separate reaction-time test. Reaction time is derived from hit trials during the five-minute screen exposure.",
+                    "Protocol v4 不设置独立反应时间测试；反应时间来自五分钟屏幕暴露期间成功回应的十字试次。",
+                  )}
             </p>
             <DetailGrid items={[
               { label: tr(language, "Valid exposure reactions", "有效观看反应"), value: exposureReactionTimes.length },
@@ -434,10 +508,10 @@ export function AdminSessionDetails({
               { label: tr(language, "Median", "中位反应时"), value: exposureReactionMedian === null ? "—" : `${exposureReactionMedian} ms` },
             ]} />
             <h4>{tr(language, "Before exposure", "光照前设备")}</h4>
-            <DeviceDetails device={v4.deviceInfo.beforeSleep} language={language} />
+            <DeviceDetails device={currentProtocol.deviceInfo.beforeSleep} language={language} />
             <h4>{tr(language, "Next morning", "第二天早晨设备")}</h4>
-            <DeviceDetails device={v4.deviceInfo.afterWaking} language={language} />
-            <DetailGrid items={[{ label: tr(language, "Device changed", "是否更换设备"), value: booleanLabel(v4.deviceInfo.deviceChanged, language) }]} />
+            <DeviceDetails device={currentProtocol.deviceInfo.afterWaking} language={language} />
+            <DetailGrid items={[{ label: tr(language, "Device changed", "是否更换设备"), value: booleanLabel(currentProtocol.deviceInfo.deviceChanged, language) }]} />
           </DetailSection>
         </>
       ) : v3 ? (
@@ -523,7 +597,7 @@ export function AdminSessionDetails({
 
       <DetailSection
         title={tr(language, `${sectionNumber(7)}. Attention-task results`, `${sectionNumber(7)}. 注意任务结果`)}
-        description={record.conditionId === "control" ? tr(language, "The Control condition has no attention task.", "Control 条件没有注意任务。") : undefined}
+        description={legacyNormalSleepControl ? tr(language, "The retired normal-sleep Control condition had no attention task.", "旧版正常睡眠对照条件没有注意任务。") : undefined}
       >
         <DetailGrid items={[
           { label: tr(language, "Planned / recorded trials", "计划／记录试次"), value: `${record.trialPlan.length} / ${record.trials.length}` },
@@ -537,7 +611,7 @@ export function AdminSessionDetails({
           items={record.trials}
           columns={attentionColumns}
           caption={tr(language, "Attention trials", "注意任务试次")}
-          emptyText={record.conditionId === "control" ? tr(language, "Not applicable for Control.", "Control 不适用。") : tr(language, "No trials were recorded.", "没有记录试次。")}
+          emptyText={legacyNormalSleepControl ? tr(language, "Not applicable for the retired normal-sleep Control.", "旧版正常睡眠对照条件不适用。") : tr(language, "No trials were recorded.", "没有记录试次。")}
         />
       </DetailSection>
 
@@ -591,7 +665,7 @@ export function AdminSessionDetails({
         {history ? (
           <>
             <DetailGrid items={[
-              { label: tr(language, "Eligible completed v3/v4 sessions", "符合条件的已完成 v3/v4 实验"), value: history.consistencyReview.completedSessionCount },
+              { label: tr(language, "Eligible completed v3/v4/v5 sessions", "符合条件的已完成 v3/v4/v5 实验"), value: history.consistencyReview.completedSessionCount },
               { label: tr(language, "Needs careful review", "需要认真复核"), value: booleanLabel(history.consistencyReview.needsReview, language) },
               { label: tr(language, "Sleep-time spread", "入睡时间跨度"), value: history.consistencyReview.metrics.sleepTimeSpreadMinutes === null ? tr(language, "Not enough data", "数据不足") : `${history.consistencyReview.metrics.sleepTimeSpreadMinutes} ${tr(language, "minutes", "分钟")}` },
               { label: tr(language, "Temperature-category spread", "温度等级跨度"), value: history.consistencyReview.metrics.temperatureOrdinalSpread ?? tr(language, "Not enough data", "数据不足") },

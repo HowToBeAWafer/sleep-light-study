@@ -46,13 +46,13 @@ const html = (await response.text())
 if (
   !html.includes("Read tutorial and begin") ||
   !html.includes("A study of how short pre-sleep screen-color exposure relates to immediate and next-morning alertness.") ||
-  !html.includes("Four-session study") ||
+  !html.includes("Five-session study") ||
   !html.includes("The condition for each session is assigned automatically")
 ) {
   throw new Error("Static render is missing the participant start control.");
 }
 if (html.includes("Control — normal sleep")) {
-  throw new Error("Static render exposes a historical condition that is not part of Protocol v4.");
+  throw new Error("Static render exposes a historical condition that is not part of Protocol v5.");
 }
 if (html.toLowerCase().includes("or test")) {
   throw new Error("Static render publicly reveals the hidden test participant hint.");
@@ -84,6 +84,10 @@ if (
   !javascript.includes("submit_profile_study_session") ||
   !javascript.includes("save_participant_study_draft") ||
   !javascript.includes("load_participant_study_draft")
+  || !javascript.includes("Black-screen Control")
+  || !javascript.includes("submit_profile_study_session_v5")
+  || !javascript.includes("save_participant_study_draft_v5")
+  || !javascript.includes("get_participant_progress_v5")
 ) {
   throw new Error("Static client bundle is missing a required study control or storage integration.");
 }
@@ -96,6 +100,12 @@ const disclosedConditionOrders = [
   "固定顺序：暗红 → 暗蓝 → 亮蓝 → 亮红",
   "固定顺序为暗红、暗蓝、亮蓝、亮红",
   "指定顺序：暗红 · 暗蓝 · 亮蓝 · 亮红",
+  "Fixed order: dim red → dim blue → black control → bright blue → bright red",
+  "Fixed order: dim red, dim blue, black control, bright blue, bright red",
+  "Assigned order: dim red · dim blue · black control · bright blue · bright red",
+  "固定顺序：暗红 → 暗蓝 → 黑色 → 亮蓝 → 亮红",
+  "固定顺序为暗红、暗蓝、黑色、亮蓝、亮红",
+  "指定顺序：暗红 · 暗蓝 · 黑色 · 亮蓝 · 亮红",
 ];
 for (const disclosedOrder of disclosedConditionOrders) {
   if (publicBuild.includes(disclosedOrder)) {

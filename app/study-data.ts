@@ -29,7 +29,7 @@ type CsvSessionDeviceInfo = {
 };
 
 export type CsvSessionRecord = {
-  schemaVersion?: 2 | 3 | 4;
+  schemaVersion?: 2 | 3 | 4 | 5;
   protocolVersion?: string;
   sequenceVersion?: string;
   sequencePosition?: number;
@@ -42,6 +42,8 @@ export type CsvSessionRecord = {
   conditionName: string;
   stimulusColorHex: string | null;
   stimulusColorRgb: string | null;
+  attentionCrossColorHex?: string;
+  attentionCrossColorRgb?: string;
   startedAtIso: string;
   stimulusStartedAtIso?: string | null;
   stimulusEndedAtIso?: string | null;
@@ -95,6 +97,8 @@ const CSV_HEADERS = [
   "condition_name",
   "stimulus_color_hex",
   "stimulus_color_rgb",
+  "attention_cross_color_hex",
+  "attention_cross_color_rgb",
   "session_started_at_iso",
   "planned_end_at_iso",
   "actual_end_at_iso",
@@ -282,6 +286,8 @@ function commonColumns(session: CsvSessionRecord): CsvRow {
     condition_name: session.conditionName,
     stimulus_color_hex: session.stimulusColorHex,
     stimulus_color_rgb: session.stimulusColorRgb,
+    attention_cross_color_hex: session.attentionCrossColorHex ?? null,
+    attention_cross_color_rgb: session.attentionCrossColorRgb ?? null,
     session_started_at_iso: session.startedAtIso,
     stimulus_started_at_iso: session.stimulusStartedAtIso ?? null,
     stimulus_ended_at_iso: session.stimulusEndedAtIso ?? null,
@@ -338,7 +344,7 @@ function commonColumns(session: CsvSessionRecord): CsvRow {
     morning_unusual_factors: morningSurvey?.unusualFactors ?? null,
     morning_unusual_factors_note: morningSurvey?.unusualFactorsNote ?? null,
     reaction_source:
-      session.schemaVersion === 4
+      session.schemaVersion === 4 || session.schemaVersion === 5
         ? "exposure_attention_trials"
         : session.schemaVersion === 3
           ? "standalone_reaction_test"

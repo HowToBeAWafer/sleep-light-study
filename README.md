@@ -1,6 +1,6 @@
 # Sleep Light Study
 
-一个研究五分钟睡前屏幕颜色暴露、即时困倦与第二天早晨主观状态的中英双语网页实验。当前数据契约是 **Protocol v4**（`schemaVersion: 4`、`protocolVersion: "overnight-v2"`）：所有参与者依次完成四种颜色，反应时间来自曝光期间的黑色十字，不再设置当前版 Control 或第二天早晨的独立反应测试。
+一个研究五分钟睡前屏幕颜色暴露、即时困倦与第二天早晨主观状态的中英双语网页实验。待发布的数据契约是 **Protocol v5**（`schemaVersion: 5`、`protocolVersion: "overnight-v3"`）：所有参与者依次完成五次屏幕暴露，其中新增一个纯黑屏幕、灰色十字的对照条件。反应时间仍来自观看阶段的稀疏十字，第二天早晨不另设独立反应测试。旧 v2/v3/v4 记录继续按原版本解释，不会被改写。
 
 ## 在线版本
 
@@ -13,24 +13,29 @@
 
 2026-07-23 的密码账户增量迁移 `20260723_password_accounts.sql` 已由项目负责人确认于 2026-07-26 在生产项目成功执行，SQL Editor 显示 `Success. No rows returned`。匹配的 `2026-07-26-password-practice-admin-results-v1` 网页随后通过 GitHub Pages workflow #42 发布；公开页面已核对到密码账户入口和匹配的静态资源。完整参与者过夜流程和需要管理员密码的真实数据详情仍应由项目负责人完成一次端到端核对。晨间邮件提醒原型已在生产发布前取消，网页不向参与者索取提醒邮箱。
 
-> **Protocol v4 生产验证 — 2026-07-31 已完成：**生产 Supabase 已完整运行 [`supabase/migrations/20260731_protocol_v4.sql`](./supabase/migrations/20260731_protocol_v4.sql)。只读核对确认 v4 函数、档案关联草稿、RLS、匿名执行权限、三条会话约束和服务器端固定顺序均已生效。迁移后仍有 1 条历史 schema 3 记录；其数量与 payload 指纹 `b9cf9c7fbb0656882991ce141f221ebf` 和 2026-07-26 的管理员备份完全一致。当前源码是与该数据库契约匹配的 v4 发布源。
+> **Protocol v4 生产验证 — 2026-07-31 已完成：**生产 Supabase 已完整运行 [`supabase/migrations/20260731_protocol_v4.sql`](./supabase/migrations/20260731_protocol_v4.sql)。只读核对确认 v4 函数、档案关联草稿、RLS、匿名执行权限、三条会话约束和服务器端固定顺序均已生效。迁移后仍有 1 条历史 schema 3 记录；其数量与 payload 指纹 `b9cf9c7fbb0656882991ce141f221ebf` 和 2026-07-26 的管理员备份完全一致。目前线上 GitHub Pages 仍是与该数据库契约匹配的 v4 版本；本地待发布源码已进入下述 v5。
 
 > **参与者界面 — 2026-08-04 已发布：**构建 `2026-08-04-professional-zh-blinded-order-v1` 已在 GitHub Pages 上线。新版专业化中文说明，并从正式参与者界面隐藏四种颜色/亮度的完整顺序及下一条件预告。参与者只看到本次实验所需条件和完成/剩余次数。研究者文档、管理员页面、内部顺序校验、数据库契约与历史记录均保持不变。
 
-## Protocol v4（当前方案）
+> **Protocol v5 — 2026-08-09 数据库已验证／网页待发布：**生产 Supabase 已成功运行增量迁移 [`supabase/migrations/20260809_protocol_v5.sql`](./supabase/migrations/20260809_protocol_v5.sql)。随后完成只读核验：8 条核心约束均已验证，v5 函数、快照表、触发器、权限和 RLS 均符合预期，所有数据完整性错误计数为 0；历史 schema 3 仍为 1 条且指纹保持 `b9cf9c7fbb0656882991ce141f221ebf`。发布前研究数据备份已保存并通过 SHA-256 校验。匹配的 `2026-08-09-five-session-commitment-v3` 前端仍待发布和 v5 端到端 pilot；当前 GitHub Pages 在此之前仍是 v4。
 
-### 固定的四次实验顺序
+## Protocol v5（待发布方案）
 
-`sequenceVersion` 固定为 `"fixed-four-v1"`。普通参与者不能选择、跳过或重新排列条件；登录后网页根据已完成的 v4 顺序位置自动分配下一项：
+### 固定的五次实验顺序
 
-| 顺序位置 | 条件 | 数字颜色值 | 暴露 |
-| --- | --- | --- | --- |
-| 1 | Dim Red / 暗红 | `#660000` / RGB `102, 0, 0` | 五分钟 |
-| 2 | Dim Blue / 暗蓝 | `#000066` / RGB `0, 0, 102` | 五分钟 |
-| 3 | Bright Blue / 亮蓝 | `#0000ff` / RGB `0, 0, 255` | 五分钟 |
-| 4 | Bright Red / 亮红 | `#ff0000` / RGB `255, 0, 0` | 五分钟 |
+`sequenceVersion` 固定为 `"fixed-five-v1"`。普通参与者不能选择、跳过或重新排列条件；登录后网页根据当前五次方案的有效完成位置自动分配下一项。有效位置包括新的 v5 完成记录，也可以包括下述符合条件的历史 v4 暗色连续前缀。参与者页面不公开完整顺序，只在每次开始前显示本次条件：
 
-只有 `completed` 且曝光也为 `completed` 的 v4 会话才完成对应顺序位置。提前终止并完成后续问卷的最终 `terminated` 记录会保留给管理员审查，但不会推进顺序；尚未完成的 `active` 数据只保存在私有草稿中，其有效期在每次保存时更新为 48 小时，而且不会出现在最终记录管理员页面。Protocol v4 不含 Control；v3 的 Control 会话和回答仍以原样保留、显示和导出。
+| 顺序位置 | 条件 | 屏幕颜色 | 注意十字 | 暴露 |
+| --- | --- | --- | --- | --- |
+| 1 | Dim Red / 暗红 | `#660000` / RGB `102, 0, 0` | 黑色 `#000000` | 五分钟 |
+| 2 | Dim Blue / 暗蓝 | `#000066` / RGB `0, 0, 102` | 黑色 `#000000` | 五分钟 |
+| 3 | Black-screen Control / 黑屏对照 | `#000000` / RGB `0, 0, 0` | 中灰 `#808080` | 五分钟 |
+| 4 | Bright Blue / 亮蓝 | `#0000ff` / RGB `0, 0, 255` | 黑色 `#000000` | 五分钟 |
+| 5 | Bright Red / 亮红 | `#ff0000` / RGB `255, 0, 0` | 黑色 `#000000` | 五分钟 |
+
+新的 v5 会话只有最终状态和观看阶段都为 `completed` 才完成对应顺序位置。为避免要求已参加早期试验的人重复相同的前两项，服务器还会承接历史 v4 中从位置 1 开始、连续完成的暗色前缀：完成 v4 暗红可承接为 v5 位置 1；只有暗红和暗蓝都已依次完成时，暗蓝才继续承接为 v5 位置 2。该规则只计算进度，不会修改、复制、重新标注或重新保存任何 v4 payload。v4 的亮蓝和亮红永远不会映射到 v5 位置 4 或 5，因为黑屏条件插入后，它们当时的实验次序不符合新的五次顺序。
+
+提前终止并完成后续问卷的最终 `terminated` 记录会保留给管理员审查，但不会推进或承接顺序。一般 `active` 草稿仍用于 48 小时内的参与者恢复；当晚间观看已经完成、观看后即时量表已保存但晨间问卷仍为空时，数据库还会额外保存只追加、仅管理员可读的持久检查点。后台将其标为“待完成晨间问卷”，但不会把它计作完整实验或推进顺序。新 `black-control` 是完整的五分钟黑屏实验，不是 v3 的“正常睡眠 Control”。历史 v3 `control` 会话仍原样保留、显示和导出。
 
 所有网页 RGB 值只是数字像素指令，不等于实测照度、亮度或光谱功率。正式研究需要固定并记录设备与显示设置；如果要报告物理光照强度，应另外用合适仪器校准。
 
@@ -39,17 +44,17 @@
 1. 用唯一的 **Study name / 实验姓名** 和密码登录。网页显示已经完成的顺序位置并自动分配下一项。
 2. 阅读教程并确认安全说明。存在**光敏性癫痫病史**，或闪烁、快速出现的视觉刺激会造成明显不适者不应参加；任何画面造成不适时立即停止。
 3. 在**平常睡觉时间**进行，不要为了实验提前或推迟上床。完成实验前问卷和基线 Karolinska Sleepiness Scale 1–9。
-4. 完成一次不保存的操作练习，然后观看指定颜色五分钟。黑色十字按 `"sparse-4-50-70-v1"` 规则出现四次，相邻计划时间为 50–70 秒，显示 1,800 ms。
+4. 完成一次不保存的操作练习，然后观看指定画面五分钟。十字按 `"sparse-4-50-70-v1"` 规则出现四次，相邻计划时间为 50–70 秒，显示 1,800 ms；黑屏对照显示灰色十字，其余条件显示黑色十字。
 5. 十字出现时点击/轻触屏幕或按 `Space` / `Enter`。无十字点击、多余点击、漏答、暂停、页面隐藏、全屏变化和提前终止都会保留。
 6. 颜色结束后**立即**完成完整标注的 Karolinska Sleepiness Scale 1–9（`"post-exposure-kss-v1"`），然后在平常时间按平常方式睡觉。
 7. 第二天醒来后在最近一次草稿保存后的 48 小时内重新打开网页，确认设备类别并完成版本化的**第二天早晨问卷**（`"morning-study-v1"`）。当前版没有睡醒后的独立三次反应测试。
-8. 完整记录上传到 Supabase，并以 `schemaVersion: 4`、`protocolVersion: "overnight-v2"` 和 `sequenceVersion: "fixed-four-v1"` 与历史记录区分。
+8. 完整记录上传到 Supabase，并以 `schemaVersion: 5`、`protocolVersion: "overnight-v3"` 和 `sequenceVersion: "fixed-five-v1"` 与历史记录区分；屏幕与十字颜色都写入记录。
 
 网页不强制插入 washout day；可以连续几晚完成不同条件，但每晚都应保持平常睡觉时间。连续实验安排仍须由获批研究方案决定。
 
 ### 标准化、安全与注意要求
 
-- 所有四次实验尽量使用**同一设备、同一浏览器、相同屏幕亮度和相同显示设置**。
+- 所有五次实验尽量使用**同一设备、同一浏览器、相同屏幕亮度和相同显示设置**。
 - 条件允许时关闭自动亮度、Night Shift、True Tone、蓝光过滤器及其他自动显示调整；每晚都采用相同设置。
 - 尽量保持室温、声音/噪音、灯光、被褥、睡衣和睡前习惯相近；真实情况不同就如实回答，不能为了“看起来一致”填写不真实答案。
 - 五分钟曝光期间保持注视，**不要切换应用、查看消息、浏览网页、使用分屏或另一个屏幕**。
@@ -62,7 +67,7 @@ The current protocol requires the English participant instructions to include:
 
 - **Safety and eligibility:** “Do not participate if you have a history of photosensitive seizures or significant discomfort with flashing or rapidly appearing visual stimuli. Stop the session if the display causes discomfort.”
 - **Normal bedtime:** “Do not go to bed later or earlier for the experiment.”
-- **Device and display:** “Use the same device and browser for all sessions. Keep the same manual screen-brightness level and display settings across all four sessions. Disable automatic brightness, Night Shift, True Tone, blue-light filters, or other automatic display adjustments when possible. Follow the assigned display-intensity instructions for each condition; do not adjust device brightness yourself.”
+- **Device and display:** “Use the same device and browser for all sessions. Keep the same manual screen-brightness level and display settings across all five sessions. Disable automatic brightness, Night Shift, True Tone, blue-light filters, or other automatic display adjustments when possible. Follow the assigned display-intensity instructions for each condition; do not adjust device brightness yourself.”
 - **No multitasking:** “Do not multitask or use split-screen. Do not switch apps, read messages, browse, or use another screen during the five-minute display.”
 
 ### 当前结果变量与早晨问卷
@@ -76,10 +81,10 @@ Karolinska Sleepiness Scale 使用完整标注 1–9 版本，不改写成自定
 
 ### 跨浏览器恢复与历史记录
 
-- v4 未完成草稿与通过身份验证的姓名档案关联；每次保存都会把有效期更新为从该次保存起 48 小时。刷新页面，或换浏览器/设备后使用**相同实验姓名和密码**登录，可以读取仍未过期的远程草稿。
-- 一个档案同一时间只能有一条未完成 v4 会话。完成后删除临时草稿并追加最终记录。
-- v2、v3 和 v4 记录通过 schema/protocol/build 版本区分。迁移不得更新、重写或删除任何历史 payload、问卷、反馈或 Control 答案。
-- v3 的 Control、前后 KSS 和独立三次反应测试属于历史协议；它们的最终记录仍可在管理员页面和 CSV/JSON 中查看，但不得补写成 v4 字段或与 v4 指标直接混合。v3 的令牌式草稿恢复只服务尚未完成的旧草稿，不会把 active 草稿暴露在最终记录管理员页面。
+- v5 未完成草稿与通过身份验证的姓名档案关联；每次保存都会把有效期更新为从该次保存起 48 小时。刷新页面，或换浏览器/设备后使用**相同实验姓名和密码**登录，可以读取仍未过期的远程草稿。
+- 一个档案同一时间只能有一条未完成的档案关联会话。完成后删除临时草稿并追加最终记录。
+- v2、v3、v4 和 v5 记录通过 schema/protocol/build 版本区分。迁移不得更新、重写或删除任何历史 payload、问卷、反馈或 Control 答案。
+- 没有符合条件历史记录的新档案从 0/5 开始。历史 v4 中连续完成的暗红、暗蓝前缀最多可承接为 v5 位置 1、2；v4 亮蓝和亮红不承接。承接只影响自动分配和完成计数，原始记录的 `schemaVersion: 4`、`sequenceVersion: "fixed-four-v1"`、payload、问卷及时间戳保持不变。v3 的正常睡眠 Control、前后 KSS 和独立三次反应测试仍属于历史协议。
 
 ## Protocol v3 历史实验流程（只用于解释旧记录）
 
@@ -279,14 +284,14 @@ CSV 始终保留 `session_summary`；JSON 保存完整嵌套结构。显示姓�
 
 ### 管理员详细结果查看
 
-管理员登录后仍先看到可搜索的会话摘要表。每条会话新增一个可展开的只读 **View details / 查看详情** 区域，在页面内按以下部分整理原始记录：
+管理员登录后先看到按规范化研究用名分组的摘要表：一个受试者名称只占一组，组摘要显示总记录数、完成数、当前五次进度、最近实验时间和黄色复核提示。展开该组后，才会列出该受试者的各次会话；每条会话仍有可展开的只读 **View details / 查看详情** 区域，在页面内按以下部分整理原始记录：
 
 - 会话、姓名档案、schema、协议、问卷和网页构建版本；
 - 条件、暴露、精确时间点、时长和终止信息；
-- v4 的实验前问卷、曝光后即时 Karolinska Sleepiness Scale 和第二天早晨问卷；v3 的睡前/睡醒后问卷和 KSS；
+- v4/v5 的实验前问卷、曝光后即时 Karolinska Sleepiness Scale 和第二天早晨问卷；v3 的睡前/睡醒后问卷和 KSS；
 - 睡前和睡醒后设备、设备是否变化；
 - 注意力计划与实际试次、无目标/额外点击、暂停和页面/全屏事件；
-- v4 从曝光 `hit` 试次得到的有效数量、平均值和中位反应时；历史 v3 的独立三次反应结果；
+- v4/v5 从曝光 `hit` 试次得到的有效数量、平均值和中位反应时；历史 v3 的独立三次反应结果；
 - 反馈/问题及环境一致性人工复核信息；
 - 按需展开的完整、已校验 JSON payload。
 
@@ -296,15 +301,15 @@ CSV 始终保留 `session_summary`；JSON 保存完整嵌套结构。显示姓�
 
 ## 数据保存与权限
 
-- 历史 v2/v3 的匿名写入只接受最终 `completed` / `terminated` 记录；v4 必须通过姓名档案和密码凭证保护的提交路径保存。参与者不能读取、修改或删除最终记录。
+- 历史 v2/v3 的匿名写入只接受最终 `completed` / `terminated` 记录；v4/v5 必须通过姓名档案和密码凭证保护的提交路径保存。参与者不能读取、修改或删除最终记录。
 - 只有 Supabase Auth 中已确认并加入私有 allow-list 的管理员可以读取远程记录。
 - 浏览器保留最终上传失败的重试副本；远程保存成功后清除相应副本。
 - `test` 和 `admin` 都不能作为正式实验姓名写入数据库。
 - 参与者姓名/密码凭证与管理员 Supabase Auth 是两套独立机制；参与者不会成为 Supabase Auth 用户。
 - 每个新会话写入不可变的 `studyBuildVersion`，以便回答始终可以追溯到当时的网页版本。
-- 数据库升级采用 additive migration（增量迁移）：旧 schema v2、旧 schema v3（包括 Control）、先前问卷答案和反馈不会被 v4 覆盖、改写或自动删除。新的会话、回答和反馈始终追加为新记录。
+- 数据库升级采用 additive migration（增量迁移）：旧 schema v2、v3（包括 Control）和 v4 payload、先前问卷答案及反馈不会被 v5 覆盖、改写或自动删除。v4 暗色连续前缀的承接只在读取进度时计算；新的会话、回答和反馈始终追加为新记录。
 
-数据库首次设置、现有项目升级和管理员步骤见 [`SUPABASE_SETUP.md`](./SUPABASE_SETUP.md)。现有生产项目已完成 2026-07-18 的 v3/档案迁移及 [`20260723_password_accounts.sql`](./supabase/migrations/20260723_password_accounts.sql)。发布 v4 前必须再完整执行 [`20260731_protocol_v4.sql`](./supabase/migrations/20260731_protocol_v4.sql)，确认 `Success. No rows returned`、旧 v2/v3 计数和 payload 指纹完全不变，然后才部署匹配的 v4 前端。不能先部署 v4 前端。
+数据库首次设置、现有项目升级和管理员步骤见 [`SUPABASE_SETUP.md`](./SUPABASE_SETUP.md)。现有生产项目已完成至 [`20260731_protocol_v4.sql`](./supabase/migrations/20260731_protocol_v4.sql)。发布 v5 前必须保存历史指纹，完整执行并验证 [`20260809_protocol_v5.sql`](./supabase/migrations/20260809_protocol_v5.sql)，确认旧 v2/v3/v4 计数和 payload 指纹完全不变，再部署匹配的 v5 前端。不能先部署 v5 前端。
 
 ## 内置研究者入口
 
@@ -314,7 +319,7 @@ CSV 始终保留 `session_summary`；JSON 保存完整嵌套结构。显示姓�
 
 ### 管理员
 
-实验姓名输入 `admin` 会进入 Supabase 邮箱密码登录页。管理员页面支持搜索、刷新、分页读取、姓名档案进度、反馈/问题、黄色环境一致性提醒、在页面内展开单次会话的完整分类详情，以及下载单次或全部 CSV/JSON。详情查看是只读的，不会修改、排除或删除记录。Email provider 必须保持开启；只关闭 **Allow new users to sign up / Enable sign ups**，不要关闭 Email provider 本身。
+实验姓名输入 `admin` 会进入 Supabase 邮箱密码登录页。管理员页面支持搜索、刷新、分页读取、按研究用名将所有会话归入同一受试者组、姓名档案进度、反馈/问题、黄色环境一致性提醒、在页面内展开单次会话的完整分类详情，以及下载单次或全部 CSV/JSON。详情查看是只读的，不会修改、排除或删除记录。Email provider 必须保持开启；只关闭 **Allow new users to sign up / Enable sign ups**，不要关闭 Email provider 本身。
 
 ## 本地运行
 
@@ -336,37 +341,40 @@ npm test
 
 - `app/page.tsx`：完整过夜流程和实验状态协调
 - `app/admin-session-details.tsx`：管理员页面内的分类、只读会话详情
+- `app/admin-session-groups.ts`：按规范化研究用名组织管理员会话列表
 - `app/study-tutorial.tsx`：中英双语完整实验教程
 - `app/attention-practice.tsx`：颜色条件的隔离、不保存引导练习轮
 - `app/participant-profile.ts`：唯一姓名、密码凭证证明、旧恢复码兼容和本地已登录档案
 - `app/consistency-review.ts`：管理员环境一致性提醒与五条件历史摘要
 - `app/session-feedback.tsx`：完成后的版本化反馈/问题窗口
-- `app/protocol-v4.ts`：v4 固定顺序、曝光后 Karolinska Sleepiness Scale 和第二天早晨问卷数据契约
+- `app/protocol-v5.ts`：v5 固定五次顺序、黑屏对照及背景／十字颜色数据契约
+- `app/protocol-v4.ts`：历史 v4 固定顺序，以及 v4/v5 共用的曝光后 Karolinska Sleepiness Scale 和第二天早晨问卷数据契约
 - `app/protocol-v3.ts`：v3 条件、KSS、问卷、设备和反应检查数据契约
 - `app/study-surveys.tsx`：实验前问卷、曝光后即时 Karolinska Sleepiness Scale 和第二天早晨问卷
 - `app/reaction-test.tsx`：只用于历史 v3 的一次练习和三次正式反应检查
-- `app/session-record.ts`、`app/session-validation.ts`、`app/session-validation-v4.ts`：版本化会话结构和严格校验
+- `app/session-record.ts`、`app/session-validation.ts`、`app/session-validation-v4.ts`、`app/session-validation-v5.ts`：版本化会话结构和严格校验
 - `app/study-data.ts`：CSV/JSON 序列化
 - `app/remote-storage.ts`：最终记录、48 小时草稿和管理员 Supabase 请求
-- `supabase/setup.sql`：全新数据库的 v3/姓名档案基础设置；新项目仍须依次运行密码迁移和 v4 迁移
+- `supabase/setup.sql`：全新数据库的 v3/姓名档案基础设置；新项目仍须依次运行密码、v4 和 v5 迁移
 - `supabase/migrations/20260718_protocol_v3.sql`：现有 v2 数据库升级到 v3
 - `supabase/migrations/20260718_participant_profiles.sql`：唯一姓名档案、历史关联、反馈和只追加保护；生产项目已执行
 - `supabase/migrations/20260723_password_accounts.sql`：把旧恢复码档案安全升级为参与者密码凭证；项目负责人确认生产项目已于 2026-07-26 执行
 - `supabase/migrations/20260731_protocol_v4.sql`：在不改写 v2/v3 的前提下加入 schema v4、固定四条件进度和档案关联的跨浏览器草稿；必须先迁移数据库再发布 v4 前端
+- `supabase/migrations/20260809_protocol_v5.sql`：在不改写 v2/v3/v4 的前提下加入 schema v5、黑屏对照、固定五次进度及只读计算的 v4 暗色连续前缀承接；必须在 v4 迁移之后运行
 - [`BUILD_LOG.md`](./BUILD_LOG.md)：按时间保留的搭建与协议变更日志
 - [`SUPABASE_SETUP.md`](./SUPABASE_SETUP.md)：Supabase 恢复、迁移和权限设置
 
 ## 研究与技术限制
 
 - 正式研究前仍需取得适用的知情同意、伦理审批，并预先规定数据保留、排除标准和统计分析方法。
-- Protocol v4 有意使用同一参与者内的固定顺序，不执行随机分组、顺序平衡、盲法或 washout 安排；固定顺序可能与夜次或练习效应混杂，必须在研究解释中明确。
+- Protocol v5 有意使用同一参与者内的固定顺序，不执行随机分组、顺序平衡、盲法或 washout 安排；固定顺序可能与夜次或练习效应混杂，必须在研究解释中明确。
 - 浏览器无法测量真实 lux、光谱、环境光或睡眠本身；数字 RGB 值不能替代物理校准。
 - Karolinska Sleepiness Scale 是主观状态量表；曝光期间四次十字得到的反应时间是稀疏浏览器指标，不是诊断工具或完整 PVT。
 - 浏览器行为计时为近似值，后台节流、设备休眠、锁屏和设备差异会影响记录。
-- v4 跨浏览器草稿恢复依赖 48 小时有效期、正确姓名/密码和网络；历史 v3 草稿仍依赖其单独令牌。
-- RLS 和 v4 姓名档案凭证保护记录读取与提交路径，但不能证明每次提交都来自真实受试者。公开招募时应考虑研究者发放的 Participant token、服务器端限流或 Edge Function。
+- v4/v5 跨浏览器草稿恢复依赖 48 小时有效期、正确姓名/密码和网络；历史 v3 草稿仍依赖其单独令牌。
+- RLS 和 v4/v5 姓名档案凭证保护记录读取与提交路径，但不能证明每次提交都来自真实受试者。公开招募时应考虑研究者发放的 Participant token、服务器端限流或 Edge Function。
 - 暗色引导练习仍会增加少量、参与者操作速度相关的屏幕时间。正式研究方案应明确把它作为标准化训练步骤并在预实验中评估其影响。
-- v4、v3 和旧版 20 次注意力数据不得直接混合分析；必须按 schema、protocol、attention protocol 和 build 版本区分。
+- v5、v4、v3 和旧版 20 次注意力数据不得因为进度承接而直接混合分析；必须按每条原始记录的 schema、protocol、attention protocol 和 build 版本区分。
 
 ## 版本状态
 
@@ -377,5 +385,6 @@ npm test
 - 2026-07-26：项目负责人确认生产项目成功执行 `20260723_password_accounts.sql`。构建 `2026-07-26-password-practice-admin-results-v1` 加入管理员页面内的分类只读详细结果查看，并通过 GitHub Pages workflow #42 发布。公开密码入口和构建资源已核对；完整过夜流程及需管理员密码的真实详情仍待项目负责人端到端复核。
 - 2026-07-31：锁定 Protocol v4（`overnight-v2`）：固定暗红 → 暗蓝 → 亮蓝 → 亮红；移除当前 Control；要求平常睡觉时间、同设备/设置与曝光期间不多任务；颜色结束后立即填写 Karolinska Sleepiness Scale；第二天早晨确认设备并填写问卷，不做独立反应测试；反应时间改由曝光 `hit` 试次计算；未完成进度可通过姓名/密码跨浏览器恢复。v2/v3 和 Control 历史答案继续保留。
 - 2026-08-04：构建 `2026-08-04-professional-zh-blinded-order-v1` 已发布到 GitHub Pages；统一优化参与者中文文案，正式参与者界面不再列出完整颜色/亮度顺序或预告下一条件，只显示当前实验所需信息及完成/剩余次数。内部固定顺序、服务器校验、管理员详情和所有历史回答保持不变。
+- 2026-08-09：本地完成 Protocol v5 黑屏对照及固定五次方案；符合条件的历史 v4 暗红／暗蓝连续前缀只读承接为当前位置 1／2，v4 亮色条件不承接，所有历史 payload 保持原样。生产 SQL 与匹配网页仍待实际迁移、验证和发布。
 
-正式收集 v4 数据前必须确认 Supabase 项目运行正常，先执行并验证 `20260731_protocol_v4.sql`，再部署匹配前端；随后用非识别性测试账户完成中英文、安全排除、固定四条件顺序、同浏览器刷新、另一浏览器姓名/密码恢复、练习、五分钟曝光、即时 Karolinska Sleepiness Scale、第二天早晨问卷、最终保存、管理员 v2/v3/v4 分类详情和文件下载的端到端试验。迁移前后还必须核对每一代历史记录的计数和指纹。
+正式收集 v5 数据前必须确认 Supabase 项目运行正常，先执行并验证 `20260809_protocol_v5.sql`，再部署匹配前端；随后用非识别性测试账户完成中英文、安全排除、固定五次顺序、全新档案 0/5、v4 暗红单项承接、v4 暗红＋暗蓝连续前缀承接、v4 亮色不承接、同浏览器刷新、跨浏览器恢复、练习、五分钟黑屏／灰十字曝光、即时 Karolinska Sleepiness Scale、次晨问卷、最终保存、管理员 v2/v3/v4/v5 分类详情和文件下载的端到端试验。迁移前后还必须核对每一代历史记录的计数和指纹。

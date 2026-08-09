@@ -1,4 +1,5 @@
 import { CONDITION_IDS, type ConditionId, type PreStudySurvey } from "./protocol-v3.ts";
+import { V5_CONDITION_ORDER, type V5ConditionId } from "./protocol-v5.ts";
 import type { StudySessionRecordV3 } from "./session-record";
 
 /**
@@ -59,10 +60,13 @@ export type ConsistencyReview = {
   };
 };
 
+export type HistoryConditionId = ConditionId | V5ConditionId;
+
 export type ConditionHistorySummary = {
-  completedConditions: ConditionId[];
-  remainingConditions: ConditionId[];
-  completedSessionCountByCondition: Record<ConditionId, number>;
+  completedConditions: HistoryConditionId[];
+  /** Current five-session conditions not represented by a completed session. */
+  remainingConditions: V5ConditionId[];
+  completedSessionCountByCondition: Record<HistoryConditionId, number>;
 };
 
 export type CompletedV3Session = Pick<
@@ -77,10 +81,10 @@ export type CompletedV3Session = Pick<
 >;
 
 export type CompletedSurveySession = {
-  schemaVersion: 3 | 4;
+  schemaVersion: 3 | 4 | 5;
   sessionId: string;
   participantId: string;
-  conditionId: ConditionId;
+  conditionId: HistoryConditionId;
   status: "completed";
   exposureStatus: string;
   preSurvey: PreStudySurvey;
@@ -96,7 +100,11 @@ export type ParticipantHistoryGroup = {
   conditionHistory: ConditionHistorySummary;
 };
 
-const CONDITION_SET = new Set<string>(CONDITION_IDS);
+const HISTORY_CONDITION_IDS: readonly HistoryConditionId[] = [
+  ...CONDITION_IDS,
+  "black-control",
+];
+const CONDITION_SET = new Set<string>(HISTORY_CONDITION_IDS);
 
 const TEMPERATURE_ORDINAL = {
   cold: 0,
@@ -130,7 +138,7 @@ export function isCompletedV3Session(value: unknown): value is CompletedV3Sessio
     typeof value.participantId === "string" &&
     value.participantId.trim().length > 0 &&
     typeof value.conditionId === "string" &&
-    CONDITION_SET.has(value.conditionId) &&
+    (CONDITION_IDS as readonly string[]).includes(value.conditionId) &&
     typeof value.exposureStatus === "string"
   );
 }
@@ -138,7 +146,7 @@ export function isCompletedV3Session(value: unknown): value is CompletedV3Sessio
 export function isCompletedSurveySession(value: unknown): value is CompletedSurveySession {
   if (!isObject(value) || !isObject(value.preSurvey)) return false;
   return (
-    (value.schemaVersion === 3 || value.schemaVersion === 4) &&
+    (value.schemaVersion === 3 || value.schemaVersion === 4 || value.schemaVersion === 5) &&
     value.status === "completed" &&
     typeof value.sessionId === "string" &&
     typeof value.participantId === "string" &&
@@ -151,10 +159,6 @@ export function isCompletedSurveySession(value: unknown): value is CompletedSurv
 
 export function normalizeParticipantName(value: string) {
   return value.normalize("NFKC").trim().replace(/\s+/gu, " ").toLowerCase();
-}
-
-function completedV3Sessions(records: readonly unknown[]) {
-  return records.filter(isCompletedV3Session);
 }
 
 function completedSurveySessions(records: readonly unknown[]) {
@@ -280,31 +284,32 @@ export function reviewParticipantConsistency(records: readonly unknown[]): Consi
   };
 }
 
-function isConditionSuccessfullyCompleted(session: CompletedV3Session) {
-  return session.conditionId === "control"
-    ? session.exposureStatus === "not-applicable"
-    : session.exposureStatus === "completed";
+function isConditionSuccessfullyCompleted(session: CompletedSurveySession) {
+  if (session.schemaVersion === 3 && session.conditionId === "control") {
+    return session.exposureStatus === "not-applicable";
+  }
+  return session.conditionId !== "control" && session.exposureStatus === "completed";
 }
 
 /**
- * Summarize all five conditions without recommending or assigning a next one.
- * Repeated sessions remain visible in the per-condition counts.
+ * Keep the retired v3 normal-sleep Control and the v5 black-screen control as
+ * separate conditions. Repeated sessions remain visible in the counts.
  */
 export function summarizeConditionHistory(records: readonly unknown[]): ConditionHistorySummary {
   const completedSessionCountByCondition = Object.fromEntries(
-    CONDITION_IDS.map((conditionId) => [conditionId, 0]),
-  ) as Record<ConditionId, number>;
+    HISTORY_CONDITION_IDS.map((conditionId) => [conditionId, 0]),
+  ) as Record<HistoryConditionId, number>;
 
-  for (const session of completedV3Sessions(records)) {
+  for (const session of completedSurveySessions(records)) {
     if (isConditionSuccessfullyCompleted(session)) {
       completedSessionCountByCondition[session.conditionId] += 1;
     }
   }
 
-  const completedConditions = CONDITION_IDS.filter(
+  const completedConditions = HISTORY_CONDITION_IDS.filter(
     (conditionId) => completedSessionCountByCondition[conditionId] > 0,
   );
-  const remainingConditions = CONDITION_IDS.filter(
+  const remainingConditions = V5_CONDITION_ORDER.filter(
     (conditionId) => completedSessionCountByCondition[conditionId] === 0,
   );
   return {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Language } from "./i18n";
 
 const CROSS_DELAY_MS = 1300;
@@ -196,6 +196,7 @@ const PRACTICE_COPY: Record<Language, PracticeCopy> = {
 export type AttentionPracticeProps = {
   language: Language;
   useTouchControls: boolean;
+  attentionCrossColor: "black" | "gray";
   onControlModeChange: (next: boolean) => void;
   onComplete: () => void;
 };
@@ -203,10 +204,21 @@ export type AttentionPracticeProps = {
 export function AttentionPractice({
   language,
   useTouchControls,
+  attentionCrossColor,
   onControlModeChange,
   onComplete,
 }: AttentionPracticeProps) {
-  const copy = PRACTICE_COPY[language];
+  const copy = useMemo(() => {
+    const baseCopy = PRACTICE_COPY[language];
+    if (attentionCrossColor === "black") return baseCopy;
+    return Object.fromEntries(Object.entries(baseCopy).map(([key, value]) => [
+      key,
+      language === "zh"
+        ? value.replaceAll("黑色十字", "灰色十字")
+        : value.replaceAll("black cross", "gray cross").replaceAll("Black-cross", "Gray-cross"),
+    ])) as PracticeCopy;
+  }, [attentionCrossColor, language]);
+  const crossHex = attentionCrossColor === "gray" ? "#808080" : "#000000";
   const [stage, setStage] = useState<PracticeStage>("intro");
   const [feedback, setFeedback] = useState<FeedbackKey | null>(null);
   const [touchEndArmed, setTouchEndArmed] = useState(false);
@@ -454,7 +466,9 @@ export function AttentionPractice({
                   width: "84px",
                   height: "84px",
                   transform: "translate(-50%, -50%)",
-                  filter: "drop-shadow(0 0 2px rgba(255, 255, 255, 0.92))",
+                  filter: attentionCrossColor === "gray"
+                    ? "none"
+                    : "drop-shadow(0 0 2px rgba(255, 255, 255, 0.92))",
                 }}
               >
                 <span
@@ -466,7 +480,7 @@ export function AttentionPractice({
                     width: "84px",
                     height: "8px",
                     borderRadius: "2px",
-                    background: "#000",
+                    background: crossHex,
                     transform: "translate(-50%, -50%)",
                   }}
                 />
@@ -479,7 +493,7 @@ export function AttentionPractice({
                     width: "8px",
                     height: "84px",
                     borderRadius: "2px",
-                    background: "#000",
+                    background: crossHex,
                     transform: "translate(-50%, -50%)",
                   }}
                 />

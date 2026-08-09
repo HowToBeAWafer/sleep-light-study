@@ -3,20 +3,23 @@
 import { useState } from "react";
 import type { Language } from "./i18n";
 import {
-  sequencePositionForCondition,
-  type V4ConditionId,
-} from "./protocol-v4";
+  V5_CONDITION_ORDER,
+  sequencePositionForV5Condition,
+  type V5ConditionId,
+} from "./protocol-v5";
 
-const CONDITION_LABELS: Record<Language, Record<V4ConditionId, string>> = {
+const CONDITION_LABELS: Record<Language, Record<V5ConditionId, string>> = {
   en: {
     "dim-red": "Dim red",
     "dim-blue": "Dim blue",
+    "black-control": "Black-screen control",
     "bright-blue": "Bright blue",
     "bright-red": "Bright red",
   },
   zh: {
     "dim-red": "暗红色",
     "dim-blue": "暗蓝色",
+    "black-control": "黑屏对照条件",
     "bright-blue": "亮蓝色",
     "bright-red": "亮红色",
   },
@@ -25,7 +28,7 @@ const CONDITION_LABELS: Record<Language, Record<V4ConditionId, string>> = {
 type StudyTutorialProps = {
   language: Language;
   displayName: string;
-  assignedConditionId: V4ConditionId;
+  assignedConditionId: V5ConditionId;
   completedSequencePositions: number[];
   isTestMode: boolean;
   onContinue: () => void;
@@ -42,9 +45,14 @@ export function StudyTutorial({
   const zh = language === "zh";
   const [safetyConfirmed, setSafetyConfirmed] = useState(false);
   const completed = new Set(completedSequencePositions);
-  const assignedPosition = sequencePositionForCondition(assignedConditionId);
+  const assignedPosition = sequencePositionForV5Condition(assignedConditionId);
+  const totalSessions = V5_CONDITION_ORDER.length;
   const completedCount = completed.size;
-  const remainingCount = Math.max(0, 4 - completedCount);
+  const remainingCount = Math.max(0, totalSessions - completedCount);
+  const isBlackControl = assignedConditionId === "black-control";
+  const crossLabel = zh
+    ? isBlackControl ? "灰色" : "黑色"
+    : isBlackControl ? "gray" : "black";
 
   return (
     <main className="tutorial-shell">
@@ -62,6 +70,15 @@ export function StudyTutorial({
               : <><strong>Do not go to bed later or earlier for the experiment.</strong> Keep temperature, sleep timing, sound, and other conditions as similar as practical, but report any real differences honestly.</>}
           </p>
         </header>
+
+        <aside className="study-commitment-notice" role="note" aria-labelledby="commitment-title">
+          <strong id="commitment-title">{zh ? "完整参与要求" : "Full study commitment"}</strong>
+          <p>
+            {zh
+              ? <><strong>本研究需要完成全部五次夜间实验；完成第一晚后，研究尚未结束。</strong>每次实验应在不同的晚上进行（可以连续数晚），并在第二天早上返回填写问卷。<strong>只有提交对应的次晨问卷后，该次实验才会计入“已完成”。</strong></>
+              : <><strong>This study requires all five evening sessions; the study is not finished after the first night.</strong> Complete each session on a separate night (consecutive nights are allowed), then return the next morning for its questionnaire. <strong>A session counts as complete only after its next-morning questionnaire is submitted.</strong></>}
+          </p>
+        </aside>
 
         <aside className="quality-warning" role="alert" aria-labelledby="safety-title">
           <strong id="safety-title">{zh ? "安全与参加资格" : "Safety and eligibility"}</strong>
@@ -97,7 +114,7 @@ export function StudyTutorial({
           <ol className="tutorial-flow-list">
             <li>{zh ? <><strong>实验说明：</strong>阅读安全事项、设备设置和操作要求。</> : <><strong>Tutorial:</strong> read the safety, device, and response instructions.</>}</li>
             <li>{zh ? <><strong>实验前问卷：</strong>填写近期睡眠状况、睡眠环境及实验前的卡罗林斯卡困倦量表。</> : <><strong>Before-exposure questionnaire:</strong> report recent sleep, environment, and the pre-exposure Karolinska Sleepiness Scale.</>}</li>
-            <li>{zh ? <><strong>观看阶段：</strong>连续观看系统分配的画面五分钟，并在黑色十字出现时作出反应。</> : <><strong>Screen exposure:</strong> watch the assigned display for five minutes and respond when a cross appears.</>}</li>
+            <li>{zh ? <><strong>观看阶段：</strong>连续观看系统分配的画面五分钟，并在十字出现时作出反应。</> : <><strong>Screen exposure:</strong> watch the assigned display for five minutes and respond when a cross appears.</>}</li>
             <li>{zh ? <><strong>观看后困倦评估：</strong>画面结束后立即填写卡罗林斯卡困倦量表。</> : <><strong>Post-exposure sleepiness measure:</strong> immediately complete the Karolinska Sleepiness Scale.</>}</li>
             <li>{zh ? <><strong>正常睡眠：</strong>按平常作息上床并正常睡眠。</> : <><strong>Sleep:</strong> go to bed at your normal time and sleep normally.</>}</li>
             <li>{zh ? <><strong>次晨问卷：</strong>醒来后返回网站完成问卷；无需另做反应时间测试。</> : <><strong>Next-morning questionnaire:</strong> return after waking; there is no separate reaction-time test.</>}</li>
@@ -111,7 +128,7 @@ export function StudyTutorial({
               <h2 id="device-title">{zh ? "保持设备与显示设置一致" : "Keep the device and display consistent"}</h2>
               <p>
                 {zh
-                  ? <>四次实验请尽量使用<strong>同一设备和浏览器</strong>，并保持相同的手动屏幕亮度及显示设置。</>
+                  ? <>五次实验请尽量使用<strong>同一设备和浏览器</strong>，并保持相同的手动屏幕亮度及显示设置。</>
                   : <>Use the <strong>same device and browser</strong> for all sessions. Keep the same manual screen brightness and display settings.</>}
               </p>
             </div>
@@ -123,7 +140,7 @@ export function StudyTutorial({
             </li>
             <li>
               <strong>{zh ? "屏幕亮度" : "Screen brightness"}</strong>
-              <span>{zh ? "四次实验均请保持相同的手动屏幕亮度。画面明暗由系统按条件分配；请遵循本次页面说明，不要自行调整设备亮度。" : "Keep the same manual screen-brightness level for all four sessions. Follow the assigned display-intensity instructions for each condition; do not adjust device brightness yourself."}</span>
+              <span>{zh ? "五次实验均请保持相同的手动屏幕亮度。画面明暗由系统按条件分配；请遵循本次页面说明，不要自行调整设备亮度。" : "Keep the same manual screen-brightness level for all five sessions. Follow the assigned display-intensity instructions for each condition; do not adjust device brightness yourself."}</span>
             </li>
             <li>
               <strong>{zh ? "温度与声音" : "Temperature and sound"}</strong>
@@ -149,7 +166,7 @@ export function StudyTutorial({
             </div>
           </div>
           <ol className="tutorial-flow-list">
-            <li>{zh ? <>当<strong>黑色十字</strong>出现时，请立即<strong>点击／轻触屏幕</strong>，或按 <strong>Space/Enter</strong>。系统将以本环节的作答时间计算反应时间。</> : <>When a <strong>black cross</strong> appears, immediately <strong>click/tap the screen</strong> or press <strong>Space/Enter</strong>. Reaction time during this display is the study reaction-time measure.</>}</li>
+            <li>{zh ? <>当<strong>{crossLabel}十字</strong>出现时，请立即<strong>点击／轻触屏幕</strong>，或按 <strong>Space/Enter</strong>。系统将以本环节的作答时间计算反应时间。</> : <>When a <strong>{crossLabel} cross</strong> appears, immediately <strong>click/tap the screen</strong> or press <strong>Space/Enter</strong>. Reaction time during this display is the study reaction-time measure.</>}</li>
             <li>{zh ? <><strong>暂停/继续：</strong>电脑按 <strong>P</strong>；触屏设备使用底部 <strong>Pause/Resume</strong>。</> : <><strong>Pause/Resume:</strong> press <strong>P</strong> on a computer or use the bottom <strong>Pause/Resume</strong> controls.</>}</li>
             <li>{zh ? <><strong>提前结束：</strong>电脑依次输入 <strong>E → N → D</strong>；触屏设备在三秒内点击两次 <strong>End</strong>。</> : <><strong>End early:</strong> type <strong>E → N → D</strong> or tap <strong>End twice</strong> within three seconds.</>}</li>
             <li>{zh ? <>系统会记录十字未出现时的点击、重复点击、暂停、实际观看时长及显示中断。</> : <>No-cross responses, extra responses, pauses, actual watching time, and display interruptions are recorded.</>}</li>
@@ -165,9 +182,9 @@ export function StudyTutorial({
             </div>
           </div>
           <div className="assigned-condition-banner">
-            <span>{zh ? `第 ${assignedPosition}/4 次实验` : `Session ${assignedPosition} of 4`}</span>
+            <span>{zh ? `第 ${assignedPosition}/${totalSessions} 次实验` : `Session ${assignedPosition} of ${totalSessions}`}</span>
             <strong>{CONDITION_LABELS[language][assignedConditionId]}</strong>
-            <small>{zh ? "完成本次实验后，系统将更新总体进度。" : "Your overall progress will update after this session."}</small>
+            <small>{zh ? "提交本次实验对应的次晨问卷后，系统才会将其计入已完成进度。" : "This session will count toward completed progress only after its next-morning questionnaire is submitted."}</small>
           </div>
           <p><strong>{completedCount}</strong> {zh ? "次已完成" : "complete"} · <strong>{remainingCount}</strong> {zh ? "次待完成" : "remaining"}</p>
         </section>
@@ -179,7 +196,7 @@ export function StudyTutorial({
               <h2 id="practice-title">{zh ? "先完成一次不保存的操作练习" : "Complete one unsaved practice round"}</h2>
               <p>
                 {zh
-                  ? <>下一页将练习黑色十字作答、暂停及提前结束操作。<strong>练习数据不会保存，也不会计入正式结果。</strong></>
+                  ? <>下一页将练习十字作答，以及暂停和提前结束操作。<strong>练习数据不会保存，也不会计入正式结果。</strong></>
                   : <>The next page practices the cross response, pause, and end controls. <strong>Practice is not saved and does not count toward the results.</strong></>}
               </p>
             </div>
