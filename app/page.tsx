@@ -211,7 +211,7 @@ const FINAL_STORAGE_KEY = "sleep-light-study:sessions:v2";
 const OVERNIGHT_DRAFT_KEY = "sleep-light-study:overnight-draft:v1";
 const RETIRED_EMAIL_PLAN_KEY = "sleep-light-study:morning-reminder-plan:v1";
 const LANGUAGE_STORAGE_KEY = "sleep-light-study:language:v1";
-const STUDY_BUILD_VERSION = "2026-08-09-five-session-commitment-v3";
+const STUDY_BUILD_VERSION = "2026-08-09-v5-progress-refresh-v4";
 const DRAFT_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 const TEST_PROFILE_ID = "00000000-0000-4000-8000-000000000001";
 
@@ -2602,28 +2602,25 @@ export default function Home() {
       activeProfile
       && normalizeParticipantName(activeProfile.displayName).toLowerCase() === cleanParticipantId.toLowerCase()
     ) {
-      let progress = participantProgress;
-      if (participantProgressStatus !== "loaded" || !progress) {
-        setProfileChecking(true);
-        setParticipantProgressStatus("loading");
-        try {
-          progress = await fetchParticipantProgress(activeProfile);
-          setParticipantProgress(progress);
-          setParticipantProgressStatus("loaded");
-        } catch {
-          setParticipantProgressStatus("failed");
-          setFormError(tr(
-            language,
-            "Your account is remembered, but its progress could not be loaded. Check the connection and press Begin again, or sign out and sign in with your password.",
-            "浏览器记住了你的账户，但暂时无法读取进度。请检查网络后再次点击开始，或退出后使用密码重新登录。",
-          ));
-          return;
-        } finally {
-          setProfileChecking(false);
-        }
-      }
-      if (!progress) return;
       setProfileChecking(true);
+      setParticipantProgressStatus("loading");
+      let progress: ParticipantProgress;
+      try {
+        // Assignment must come from a fresh server read. Another device may
+        // have completed a session after this page last loaded its progress.
+        progress = await fetchParticipantProgress(activeProfile);
+        setParticipantProgress(progress);
+        setParticipantProgressStatus("loaded");
+      } catch {
+        setParticipantProgressStatus("failed");
+        setFormError(tr(
+          language,
+          "Your account is remembered, but its latest progress could not be loaded. Check the connection and press Begin again, or sign out and sign in with your password.",
+          "浏览器记住了你的账户，但暂时无法读取最新进度。请检查网络后再次点击开始，或退出后使用密码重新登录。",
+        ));
+        setProfileChecking(false);
+        return;
+      }
       try {
         await openAssignedSession(activeProfile, progress);
       } catch {
@@ -2632,9 +2629,8 @@ export default function Home() {
           "Your account opened, but its unfinished session could not be checked. Check the connection and try again.",
           "账户已打开，但暂时无法检查未完成的实验。请检查网络后重试。",
         ));
-      } finally {
-        setProfileChecking(false);
       }
+      setProfileChecking(false);
       return;
     }
 
