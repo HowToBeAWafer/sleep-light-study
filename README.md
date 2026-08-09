@@ -1,6 +1,6 @@
 # Sleep Light Study
 
-一个研究五分钟睡前屏幕颜色暴露、即时困倦与第二天早晨主观状态的中英双语网页实验。待发布的数据契约是 **Protocol v5**（`schemaVersion: 5`、`protocolVersion: "overnight-v3"`）：所有参与者依次完成五次屏幕暴露，其中新增一个纯黑屏幕、灰色十字的对照条件。反应时间仍来自观看阶段的稀疏十字，第二天早晨不另设独立反应测试。旧 v2/v3/v4 记录继续按原版本解释，不会被改写。
+一个研究五分钟睡前屏幕颜色暴露、即时困倦与第二天早晨主观状态的中英双语网页实验。当前线上数据契约是 **Protocol v5**（`schemaVersion: 5`、`protocolVersion: "overnight-v3"`）：所有参与者依次完成五次屏幕暴露，其中新增一个纯黑屏幕、灰色十字的对照条件。反应时间仍来自观看阶段的稀疏十字，第二天早晨不另设独立反应测试。旧 v2/v3/v4 记录继续按原版本解释，不会被改写。
 
 ## 在线版本
 
@@ -13,13 +13,13 @@
 
 2026-07-23 的密码账户增量迁移 `20260723_password_accounts.sql` 已由项目负责人确认于 2026-07-26 在生产项目成功执行，SQL Editor 显示 `Success. No rows returned`。匹配的 `2026-07-26-password-practice-admin-results-v1` 网页随后通过 GitHub Pages workflow #42 发布；公开页面已核对到密码账户入口和匹配的静态资源。完整参与者过夜流程和需要管理员密码的真实数据详情仍应由项目负责人完成一次端到端核对。晨间邮件提醒原型已在生产发布前取消，网页不向参与者索取提醒邮箱。
 
-> **Protocol v4 生产验证 — 2026-07-31 已完成：**生产 Supabase 已完整运行 [`supabase/migrations/20260731_protocol_v4.sql`](./supabase/migrations/20260731_protocol_v4.sql)。只读核对确认 v4 函数、档案关联草稿、RLS、匿名执行权限、三条会话约束和服务器端固定顺序均已生效。迁移后仍有 1 条历史 schema 3 记录；其数量与 payload 指纹 `b9cf9c7fbb0656882991ce141f221ebf` 和 2026-07-26 的管理员备份完全一致。目前线上 GitHub Pages 仍是与该数据库契约匹配的 v4 版本；本地待发布源码已进入下述 v5。
+> **Protocol v4 生产验证 — 2026-07-31 已完成：**生产 Supabase 已完整运行 [`supabase/migrations/20260731_protocol_v4.sql`](./supabase/migrations/20260731_protocol_v4.sql)。只读核对确认 v4 函数、档案关联草稿、RLS、匿名执行权限、三条会话约束和服务器端固定顺序均已生效。迁移后仍有 1 条历史 schema 3 记录；其数量与 payload 指纹 `b9cf9c7fbb0656882991ce141f221ebf` 和 2026-07-26 的管理员备份完全一致。该网页版本现已由下述 v5 版本取代，历史 v4 数据仍按原契约保留。
 
 > **参与者界面 — 2026-08-04 已发布：**构建 `2026-08-04-professional-zh-blinded-order-v1` 已在 GitHub Pages 上线。新版专业化中文说明，并从正式参与者界面隐藏四种颜色/亮度的完整顺序及下一条件预告。参与者只看到本次实验所需条件和完成/剩余次数。研究者文档、管理员页面、内部顺序校验、数据库契约与历史记录均保持不变。
 
-> **Protocol v5 — 2026-08-09 数据库已验证／网页待发布：**生产 Supabase 已成功运行增量迁移 [`supabase/migrations/20260809_protocol_v5.sql`](./supabase/migrations/20260809_protocol_v5.sql)。随后完成只读核验：8 条核心约束均已验证，v5 函数、快照表、触发器、权限和 RLS 均符合预期，所有数据完整性错误计数为 0；历史 schema 3 仍为 1 条且指纹保持 `b9cf9c7fbb0656882991ce141f221ebf`。发布前研究数据备份已保存并通过 SHA-256 校验。匹配的 `2026-08-09-five-session-commitment-v3` 前端仍待发布和 v5 端到端 pilot；当前 GitHub Pages 在此之前仍是 v4。
+> **Protocol v5 — 2026-08-09 数据库已验证／网页已发布：**生产 Supabase 已成功运行增量迁移 [`supabase/migrations/20260809_protocol_v5.sql`](./supabase/migrations/20260809_protocol_v5.sql)。随后完成只读核验：8 条核心约束均已验证，v5 函数、快照表、触发器、权限和 RLS 均符合预期，所有数据完整性错误计数为 0；历史 schema 3 仍为 1 条且指纹保持 `b9cf9c7fbb0656882991ce141f221ebf`。发布前研究数据备份已保存并通过 SHA-256 校验。匹配的 `2026-08-09-five-session-commitment-v3` 前端已由 GitHub 提交 `c3e6b3a` 发布到 GitHub Pages；公开中英文首页已核对到 `SL-V5`、五次晚间实验和每次实验的次晨问卷要求，且没有出现“四天”旧提示或参与者可见的完整条件顺序。公开招募前仍需完成下述非识别性 v5 端到端 pilot。
 
-## Protocol v5（待发布方案）
+## Protocol v5（当前线上方案）
 
 ### 固定的五次实验顺序
 
@@ -309,7 +309,7 @@ CSV 始终保留 `session_summary`；JSON 保存完整嵌套结构。显示姓�
 - 每个新会话写入不可变的 `studyBuildVersion`，以便回答始终可以追溯到当时的网页版本。
 - 数据库升级采用 additive migration（增量迁移）：旧 schema v2、v3（包括 Control）和 v4 payload、先前问卷答案及反馈不会被 v5 覆盖、改写或自动删除。v4 暗色连续前缀的承接只在读取进度时计算；新的会话、回答和反馈始终追加为新记录。
 
-数据库首次设置、现有项目升级和管理员步骤见 [`SUPABASE_SETUP.md`](./SUPABASE_SETUP.md)。现有生产项目已完成至 [`20260731_protocol_v4.sql`](./supabase/migrations/20260731_protocol_v4.sql)。发布 v5 前必须保存历史指纹，完整执行并验证 [`20260809_protocol_v5.sql`](./supabase/migrations/20260809_protocol_v5.sql)，确认旧 v2/v3/v4 计数和 payload 指纹完全不变，再部署匹配的 v5 前端。不能先部署 v5 前端。
+数据库首次设置、现有项目升级和管理员步骤见 [`SUPABASE_SETUP.md`](./SUPABASE_SETUP.md)。现有生产项目已完成并验证 [`20260809_protocol_v5.sql`](./supabase/migrations/20260809_protocol_v5.sql)，匹配的 v5 前端随后发布。任何新环境仍必须依次执行并验证历史迁移，先确认数据库契约，再部署匹配前端；不能先部署 v5 前端。
 
 ## 内置研究者入口
 
@@ -385,6 +385,6 @@ npm test
 - 2026-07-26：项目负责人确认生产项目成功执行 `20260723_password_accounts.sql`。构建 `2026-07-26-password-practice-admin-results-v1` 加入管理员页面内的分类只读详细结果查看，并通过 GitHub Pages workflow #42 发布。公开密码入口和构建资源已核对；完整过夜流程及需管理员密码的真实详情仍待项目负责人端到端复核。
 - 2026-07-31：锁定 Protocol v4（`overnight-v2`）：固定暗红 → 暗蓝 → 亮蓝 → 亮红；移除当前 Control；要求平常睡觉时间、同设备/设置与曝光期间不多任务；颜色结束后立即填写 Karolinska Sleepiness Scale；第二天早晨确认设备并填写问卷，不做独立反应测试；反应时间改由曝光 `hit` 试次计算；未完成进度可通过姓名/密码跨浏览器恢复。v2/v3 和 Control 历史答案继续保留。
 - 2026-08-04：构建 `2026-08-04-professional-zh-blinded-order-v1` 已发布到 GitHub Pages；统一优化参与者中文文案，正式参与者界面不再列出完整颜色/亮度顺序或预告下一条件，只显示当前实验所需信息及完成/剩余次数。内部固定顺序、服务器校验、管理员详情和所有历史回答保持不变。
-- 2026-08-09：本地完成 Protocol v5 黑屏对照及固定五次方案；符合条件的历史 v4 暗红／暗蓝连续前缀只读承接为当前位置 1／2，v4 亮色条件不承接，所有历史 payload 保持原样。生产 SQL 与匹配网页仍待实际迁移、验证和发布。
+- 2026-08-09：完成 Protocol v5 黑屏对照及固定五次方案；符合条件的历史 v4 暗红／暗蓝连续前缀只读承接为当前位置 1／2，v4 亮色条件不承接，所有历史 payload 保持原样。生产 SQL 与历史数据核验通过，匹配构建 `2026-08-09-five-session-commitment-v3` 已发布到 GitHub Pages，并完成中英文首页冒烟检查。
 
-正式收集 v5 数据前必须确认 Supabase 项目运行正常，先执行并验证 `20260809_protocol_v5.sql`，再部署匹配前端；随后用非识别性测试账户完成中英文、安全排除、固定五次顺序、全新档案 0/5、v4 暗红单项承接、v4 暗红＋暗蓝连续前缀承接、v4 亮色不承接、同浏览器刷新、跨浏览器恢复、练习、五分钟黑屏／灰十字曝光、即时 Karolinska Sleepiness Scale、次晨问卷、最终保存、管理员 v2/v3/v4/v5 分类详情和文件下载的端到端试验。迁移前后还必须核对每一代历史记录的计数和指纹。
+公开招募前仍应用非识别性测试账户完成中英文、安全排除、固定五次顺序、全新档案 0/5、v4 暗红单项承接、v4 暗红＋暗蓝连续前缀承接、v4 亮色不承接、同浏览器刷新、跨浏览器恢复、练习、五分钟黑屏／灰十字曝光、即时 Karolinska Sleepiness Scale、次晨问卷、最终保存、管理员 v2/v3/v4/v5 分类详情和文件下载的端到端试验。生产迁移、历史指纹和公开前端虽已验证，但不替代这项完整 pilot。
