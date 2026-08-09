@@ -5,7 +5,7 @@
 ## 在线版本
 
 - 推荐入口：[GitHub Pages](https://howtobeawafer.github.io/sleep-light-study/)
-- 旧版备用地址：[OpenAI Sites](https://sleep-light-study.dkm26355.chatgpt.site/)（部分网络会被 Cloudflare 拦截，不作为本版本参与者入口）
+- 旧版存档地址：[OpenAI Sites](https://sleep-light-study.dkm26355.chatgpt.site/)（未更新至 Protocol v5，且部分网络会被 Cloudflare 拦截；不得作为本版本参与者入口）
 
 部分网络可能会被 `chatgpt.site` 前方的 Cloudflare 安全规则拦截，因此参与者应优先使用 GitHub Pages。
 
