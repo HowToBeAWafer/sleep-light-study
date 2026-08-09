@@ -101,3 +101,31 @@ test("both account and automatic local restoration enforce the assignment check"
     /await retireParticipantDraftSafely\(profile, remoteDraft\.sessionId\);[\s\S]*deleteLocalOvernightDraft\(remoteDraft\)/,
   );
 });
+
+test("a remembered account refreshes server progress before opening its assigned session", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const rememberedAccountStart = page.indexOf("const activeProfile = participantProfileRef.current;");
+  const passwordValidationStart = page.indexOf(
+    "if (!isValidParticipantPassword(participantPassword))",
+    rememberedAccountStart,
+  );
+  assert.ok(rememberedAccountStart >= 0 && passwordValidationStart > rememberedAccountStart);
+  const rememberedAccountBlock = page.slice(rememberedAccountStart, passwordValidationStart);
+
+  const refreshIndex = rememberedAccountBlock.indexOf(
+    "progress = await fetchParticipantProgress(activeProfile);",
+  );
+  const assignmentIndex = rememberedAccountBlock.indexOf(
+    "await openAssignedSession(activeProfile, progress);",
+  );
+  assert.ok(refreshIndex >= 0, "Begin must fetch the latest server progress");
+  assert.ok(
+    assignmentIndex > refreshIndex,
+    "the session may open only after the latest server progress is loaded",
+  );
+  assert.doesNotMatch(
+    rememberedAccountBlock,
+    /let progress = participantProgress/,
+    "a previously loaded in-memory progress object must not decide a new assignment",
+  );
+});
