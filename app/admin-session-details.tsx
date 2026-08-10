@@ -432,7 +432,7 @@ export function AdminSessionDetails({
           { label: tr(language, "Assessment completed", "评估完成"), value: modern ? exactDate(modern.assessmentCompletedAtIso, language) : tr(language, "Not collected in schema v2", "Schema v2 未收集") },
           { label: tr(language, "Session ended", "实验结束"), value: exactDate(record.endedAtIso, language) },
           { label: tr(language, "Planned duration", "计划时长"), value: formatDuration(record.plannedDurationMs, language) },
-          { label: tr(language, "Active exposure duration", "有效观看时长"), value: formatDuration(record.actualDurationMs, language) },
+          { label: tr(language, "Active exposure duration (pauses excluded)", "有效暴露时长（不含暂停）"), value: formatDuration(record.actualDurationMs, language) },
           { label: tr(language, "Wall-clock duration", "墙钟时长"), value: formatDuration(record.wallClockDurationMs, language) },
           { label: tr(language, "Total paused", "暂停总时长"), value: formatDuration(record.totalPausedDurationMs, language) },
           { label: tr(language, "Cross visible duration", "十字显示时长"), value: formatDuration(record.crossVisibleMs, language) },

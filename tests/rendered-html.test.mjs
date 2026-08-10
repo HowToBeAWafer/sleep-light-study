@@ -446,7 +446,7 @@ test("admin portal groups study names and expands organized, safe, detailed sess
   assert.match(page, /profileMatch/);
   assert.match(
     page,
-    /const STUDY_BUILD_VERSION = "2026-08-09-v5-progress-refresh-v4"/,
+    /const STUDY_BUILD_VERSION = "2026-08-10-admin-terminated-duration-v5"/,
   );
 
   for (const section of [
@@ -525,6 +525,9 @@ test("immediate END still exports a complete terminated session row", () => {
   assert.equal(record.condition_id, "bright-red");
   assert.equal(record.session_status, "terminated");
   assert.equal(record.termination_reason, "end_sequence");
+  assert.equal(record.actual_duration_ms, "500");
+  assert.equal(record.wall_clock_duration_ms, "500");
+  assert.equal(record.total_paused_duration_ms, "0");
   assert.equal(record.event_type, "session_summary");
   assert.equal(record.event_elapsed_ms, "0");
 

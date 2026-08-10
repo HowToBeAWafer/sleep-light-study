@@ -98,6 +98,7 @@ import {
   groupAdminSessionsByParticipant,
   isAwaitingMorningQuestionnaire,
 } from "./admin-session-groups";
+import { formatTerminatedExposureSummary } from "./admin-session-summary";
 import { shouldRetireDraftForAssignedProgress } from "./draft-transition";
 
 type Phase =
@@ -211,7 +212,7 @@ const FINAL_STORAGE_KEY = "sleep-light-study:sessions:v2";
 const OVERNIGHT_DRAFT_KEY = "sleep-light-study:overnight-draft:v1";
 const RETIRED_EMAIL_PLAN_KEY = "sleep-light-study:morning-reminder-plan:v1";
 const LANGUAGE_STORAGE_KEY = "sleep-light-study:language:v1";
-const STUDY_BUILD_VERSION = "2026-08-09-v5-progress-refresh-v4";
+const STUDY_BUILD_VERSION = "2026-08-10-admin-terminated-duration-v5";
 const DRAFT_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 const TEST_PROFILE_ID = "00000000-0000-4000-8000-000000000001";
 
@@ -987,15 +988,28 @@ function AdminPortal({ language, onExit }: { language: Language; onExit: () => v
                             <td><strong>{conditionLabel(record.conditionId, language)}</strong></td>
                             <td>{new Date(record.startedAtIso).toLocaleString(language === "zh" ? "zh-CN" : "en")}</td>
                             <td>v{record.schemaVersion}{record.schemaVersion !== 2 && record.studyBuildVersion ? <small>{record.studyBuildVersion}</small> : <small>{tr(language, "historical", "历史版本")}</small>}</td>
-                            <td><span className={`status-pill ${awaitingMorning ? "awaiting-morning" : record.status}`}>
-                              {awaitingMorning
-                                ? tr(language, "Awaiting morning questionnaire", "待完成晨间问卷")
-                                : record.status === "completed"
-                                  ? tr(language, "Completed", "已完成")
-                                  : record.status === "terminated"
-                                    ? tr(language, "Terminated", "提前终止")
-                                    : tr(language, "Active", "进行中")}
-                            </span></td>
+                            <td>
+                              <div className="admin-session-status">
+                                <span className={`status-pill ${awaitingMorning ? "awaiting-morning" : record.status}`}>
+                                  {awaitingMorning
+                                    ? tr(language, "Awaiting morning questionnaire", "待完成晨间问卷")
+                                    : record.status === "completed"
+                                      ? tr(language, "Completed", "已完成")
+                                      : record.status === "terminated"
+                                        ? tr(language, "Terminated", "提前终止")
+                                        : tr(language, "Active", "进行中")}
+                                </span>
+                                {record.status === "terminated" ? (
+                                  <small>
+                                    {formatTerminatedExposureSummary(
+                                      record.actualDurationMs,
+                                      record.plannedDurationMs,
+                                      language,
+                                    )}
+                                  </small>
+                                ) : null}
+                              </div>
+                            </td>
                             <td>{v5?.preSurvey.sleepinessKss ?? v4?.preSurvey.sleepinessKss ?? v3?.preSurvey.sleepinessKss ?? "—"}</td>
                             <td>{v5?.postExposureSurvey?.sleepinessKss ?? v4?.postExposureSurvey?.sleepinessKss ?? v3?.postSurvey?.sleepinessKss ?? "—"}</td>
                             <td>{v5 || v4 ? (attentionReactionMean == null ? "—" : `${Math.round(attentionReactionMean)} ms`) : v3?.reactionTest?.averageReactionTimeMs == null ? "—" : `${Math.round(v3.reactionTest.averageReactionTimeMs)} ms`}</td>
